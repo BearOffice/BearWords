@@ -1,0 +1,200 @@
+﻿@page "/import"
+@inject ImportService ImportService
+@inject NavigationManager Navigation
+
+<h2 class="mb-4">Import</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+<div class="card">
+    <div class="card-body">
+        <div class="row">
+            <!-- Input Section -->
+            <div class="col-md-6 mb-4">
+                <h5>Import Data</h5>
+                <div class="mb-3">
+                    <label for="jsonInput" class="form-label">JSON Data</label>
+                    <textarea class="form-control" id="jsonInput" rows="15" disabled="@isProcessing"
+                              @bind="jsonInput" @bind:event="oninput"></textarea>
+                </div>
+
+                <!-- Options -->
+                <div class="d-flex align-items-center flex-wrap mb-3">
+                    <span class="fw-semibold me-3 mb-1">Data Type</span>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="theme" id="type-word" autocomplete="off"
+                               disabled="@isProcessing" checked="@(importType == ImportType.Word)" 
+                               @onchange="() => importType = ImportType.Word">
+                        <label class="btn btn-outline-primary" for="type-word">
+                            <i class="bi bi-book"></i> Words
+                        </label>
+                        <input type="radio" class="btn-check" name="theme" id="type-tag" autocomplete="off"
+                               disabled="@isProcessing" checked="@(importType == ImportType.Tag)" 
+                               @onchange="() => importType = ImportType.Tag">
+                        <label class="btn btn-outline-primary" for="type-tag">
+                            <i class="bi bi-tags"></i> Tags
+                        </label>
+                    </div>
+                </div>
+
+                @if (importType == ImportType.Word)
+                {
+                    <div class="mb-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoAddPhrase"
+                                disabled="@isProcessing" @bind="autoAddToPhrase">
+                            <label class="form-check-label" for="autoAddPhrase">
+                                Auto add to phrase (create new phrase if word not found)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tagAutoSuggest" 
+                                disabled="@isProcessing" @bind="tagAutoSuggest">
+                            <label class="form-check-label" for="tagAutoSuggest">
+                                Tag auto suggest (add suggested tags)
+                            </label>
+                        </div>
+                    </div>
+                }
+
+                <button class="btn btn-primary" @onclick="ProcessImport" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-box-arrow-in-down-left me-2"></i>
+                        <span>Import</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Output Section -->
+            <div class="col-md-6 mb-4">
+                <h5>Summary</h5>
+                <div class="mb-3">
+                    <label for="summaryOutput" class="form-label">Import Results</label>
+                    <textarea class="form-control" id="summaryOutput" rows="15" readonly
+                              @bind="summaryOutput"></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(summaryOutput))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="ClearResults">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Clear Results
+                    </button>
+                }
+            </div>
+        </div>
+
+        <!-- Format Information -->
+        <div class="mt-1">
+            <h6>Import Formats:</h6>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted">Words Format:</h6>
+                    <pre class="bg-light p-3 rounded"><code>[
+  {
+    "lang": "en",
+    "title": "word",
+    "alias": [],
+    "note": "optional note",
+    "tags": ["tag1", "tag2"]
+  },
+  {
+    "lang": "ja", 
+    "title": "英語",
+    "alias": ["えいご"],
+    "note": "English. A language.",
+    "tags": ["tag3"]
+  }
+]</code></pre>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-muted">Tags Format:</h6>
+                    <pre class="bg-light p-3 rounded"><code>[
+  {
+    "category": "Category Name",
+    "description": "a note for this category",
+    "tags": {
+      "tag1": "A tag note",
+      "tag2": null
+    }
+  }
+]</code></pre>
+                </div>
+            </div>
+
+            <small class="text-muted">
+                <strong>Note:</strong>
+                The words will be imported from top to bottom.
+            </small>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private ImportType importType = ImportType.Word;
+    private string jsonInput = string.Empty;
+    private string summaryOutput = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool autoAddToPhrase = true;
+    private bool tagAutoSuggest = true;
+    private bool isProcessing = false;
+
+    private async Task ProcessImport()
+    {
+        if (string.IsNullOrWhiteSpace(jsonInput))
+        {
+            errorMessage = "Please enter JSON data to import.";
+            return;
+        }
+
+        isProcessing = true;
+        errorMessage = string.Empty;
+        summaryOutput = string.Empty;
+
+        try
+        {
+            var (summary, remainingData) = importType switch
+            {
+                ImportType.Word => await Task.Run(async () =>
+                    await ImportService.ImportWordsAsync(jsonInput, autoAddToPhrase, tagAutoSuggest)),
+                ImportType.Tag => await Task.Run(async () =>
+                    await ImportService.ImportTagsAsync(jsonInput)),
+                _ => throw new NotImplementedException()
+            };
+
+            jsonInput = remainingData;
+            summaryOutput = summary.GetSummaryText();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Import failed: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void ClearResults()
+    {
+        summaryOutput = string.Empty;
+        errorMessage = string.Empty;
+    }
+
+    private enum ImportType
+    {
+        Word,
+        Tag,
+    }
+}

@@ -1,0 +1,35 @@
+﻿services:
+  bearwordsapi:
+    # To build the image locally instead of pulling from Docker Hub:
+    # 1. Uncomment the 'build' section below
+    # 2. Comment out the 'image' line
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    image: bearoffice/bearwordsapi:latest
+
+    ports:
+      - 8080:8080  # Expose HTTP port 8080
+      # - 8081:8081  # Uncomment to expose HTTPS port 8081
+
+    environment:
+      - HTTP_PORTS=8080
+      # To enable HTTPS, uncomment the following three lines and ensure the certificate exists
+      # - HTTPS_PORTS=8081
+      # - ASPNETCORE_Kestrel__Certificates__Default__Password=password123  # Password for the .pfx certificate
+      # - ASPNETCORE_Kestrel__Certificates__Default__Path=/app/certs/server.pfx  # Path to the certificate
+
+    volumes:
+      - ./data:/app/data
+      - ./server_configs.txt:/app/server_configs.txt
+
+      # If using HTTPS, uncomment the line below to mount the required certificate and config files:
+      # - ./server.pfx:/app/certs/server.pfx:ro  # Read-only mount of the certificate
+
+    # By default, the container runs as user 'app' (UID 1654).
+    # If you prefer to run it as a non-root user, 
+    # ensure that the mounted volumes and files have the appropriate permissions and ownership.
+    user: "root:root"
+
+    restart: always

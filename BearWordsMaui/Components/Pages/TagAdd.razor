@@ -1,0 +1,147 @@
+﻿@page "/tag/add"
+@inherits BasePageComponent
+@inject TagService TagService
+@inject ITempStorageService TempStorage
+
+<h2 class="mb-4">Add Tag</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (tagCategories is null)
+{
+    <div class="text-center text-muted">
+        <p>Failed to load tag categories.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <form @onsubmit:preventDefault="true" @onsubmit="OnSubmit">
+                <div class="mb-2">
+                    <label for="tag-name" class="form-label">Tag Name</label>
+                    <input type="text" class="form-control" id="tag-name" @bind="tagName">
+                </div>
+
+                <div class="mb-2">
+                    <label for="tag-details" class="form-label">Details</label>
+                    <textarea class="form-control" id="tag-details" rows="6" @bind="description"></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label for="tag-category" class="form-label">Tag Category</label>
+                    <div class="d-flex gap-2">
+                        <select class="form-select" id="tag-category" @bind="selectedTagCategoryId">
+                            <option value="">Select a category</option>
+                            @foreach (var category in tagCategories)
+                            {
+                                <option value="@category.TagCategoryId">@category.CategoryName</option>
+                            }
+                        </select>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="NavToTagCatAdd">
+                            <i class="bi bi-plus-circle"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                        <i class="bi bi-save"></i> Save
+                    </button>
+                    <button type="button" class="btn btn-secondary" @onclick="NavigateToPrevious">
+                        <i class="bi bi-x-circle"></i> Discard
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
+@code {
+    private TagCategory[]? tagCategories;
+    private string tagName = string.Empty;
+    private string? description;
+    private string selectedTagCategoryId = string.Empty;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTagCategories();
+
+        var data = TempStorage.Pop<TagData>("tag_add");
+        if (data is not null)
+        {
+            tagName = data.TagName!;
+            description = data.Desc;
+        }
+    }
+
+    private async Task LoadTagCategories()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            tagCategories = await TagService.GetTagCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load tag categories: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(tagName))
+        {
+            errorMessage = "Tag name is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedTagCategoryId))
+        {
+            errorMessage = "Tag category is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await TagService.CreateTagAsync(tagName, description, selectedTagCategoryId);
+            await NavigateToPrevious();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to create tag: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void NavToTagCatAdd()
+    {
+        TempStorage.Push("tag_add", new TagData { TagName = tagName, Desc = description });
+        Navigation.NavigateTo("/tag-category/add");
+    }
+
+    private class TagData
+    {
+        internal string? TagName { get; set; }
+        internal string? Desc { get; set; }
+    }
+}

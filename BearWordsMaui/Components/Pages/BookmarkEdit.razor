@@ -1,0 +1,153 @@
+﻿@page "/bookmark/edit/{BookmarkId}"
+@inherits BasePageComponent
+@inject BookmarkService BookmarkService
+@inject TagService TagService
+@inject ITempStorageService TempStorage
+
+<h2 class="mb-4">Edit Bookmark</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <div class="card">
+        <div class="card-body">
+            <Placeholder />
+        </div>
+    </div>
+}
+else if (bookmark is null)
+{
+    <div class="text-center text-muted">
+        <p>No bookmark found.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+                <h4 class="card-title mb-0 me-2">@bookmark.Word.Word</h4>
+                <span class="badge bg-info">@bookmark.Word.SourceLanguage</span>
+            </div>
+
+            <div class="mb-3">
+                <label for="bookmark-notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="bookmark-notes" rows="6" @bind="note"></textarea>
+            </div>
+
+            <div class="mb-4">
+                <SelectTags TagHintKeyword="@bookmark.Word.Word"
+                            TagCategories="@tagCategories"
+                            SelectedTags="@selectedTags"
+                            OnNavigate="SetTempStorage" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@isSaving" @onclick="OnSubmit">
+                    <i class="bi bi-save"></i> Save
+                </button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateToPrevious">
+                    <i class="bi bi-x-circle"></i> Discard
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <ConflictLogs TargetId="@BookmarkId" />
+}
+
+
+@code {
+    [Parameter] public string BookmarkId { get; set; } = null!;
+
+    private Bookmark? bookmark;
+    private TagCategory[] tagCategories = [];
+    private List<Tag> selectedTags = [];
+    private string? note;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var data = TempStorage.Pop<BookmarkData>("bookmark_edit");
+        await LoadData(data);
+    }
+
+    private async Task LoadData(BookmarkData? tempData = null)
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            bookmark = await BookmarkService.GetBookmarkByIdAsync(BookmarkId);
+            tagCategories = await TagService.GetTagCategoriesAsync();
+
+            if (bookmark is not null)
+            {
+                if (tempData is not null)
+                {
+                    note = tempData.Note;
+                    selectedTags = tempData.SelectedTags!;
+                }
+                else
+                {
+                    note = bookmark.Note;
+                    selectedTags = bookmark.BookmarkTags
+                        .Where(bt => !bt.DeleteFlag)
+                        .Select(bt => bt.Tag)
+                        .ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load bookmark: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnSubmit()
+    {
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await BookmarkService.UpdateBookmarkAsync(BookmarkId, note);
+            await BookmarkService.UpdateBookmarkTagsAsync(BookmarkId, 
+                selectedTags.Select(t => t.TagId).ToArray());
+            
+            await NavigateToPrevious();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update bookmark: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void SetTempStorage()
+    {
+        TempStorage.Remove("bookmark_edit");
+        TempStorage.Push("bookmark_edit", new BookmarkData
+        {
+            Note = note,
+            SelectedTags = selectedTags,
+        });
+    }
+
+    private class BookmarkData
+    {
+        internal string? Note { get; set; }
+        internal List<Tag>? SelectedTags { get; set; }
+    }
+}

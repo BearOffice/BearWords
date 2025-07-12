@@ -1,0 +1,194 @@
+﻿@page "/recycle-bin"
+@using BearWordsMaui.Components.Pages.Elements
+@using TriggerLib
+@inject RestoreService RestoreService
+@inject IDateTimeService DateTimeService
+@inject ITriggerSourceFactory TriggerSourceFactory
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Recycle Bin</h2>
+    <button class="btn btn-danger" @onclick="@(() => showDeleteModal = true)">
+        <i class="bi bi-trash"></i> Clear All
+    </button>
+</div>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No deleted items found.</p>
+        <small>Items you delete will appear here and can be restored.</small>
+    </div>
+}
+else
+{
+    <SuccessAlert Message="@successMessage" AsRawHtml="true" />
+
+    <div class="list-group">
+        @foreach (var item in paginatedResult.Items)
+        {
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    @{
+                        var itemTitle = $"[{item.Type}] {item.Name}";
+                    }
+                    <div>
+                        <h5 class="mb-1" style="overflow-wrap: anywhere">@itemTitle</h5>
+                        <small class="text-muted">Deleted @item.DeletedAt.GetRelativeTime(DateTimeService)</small>
+                    </div>
+                    <button class="btn btn-sm btn-success"
+                            @onclick="@(() => RestoreItem(item.Id, item.Type, itemTitle))" disabled="@isRestoring">
+                        @if (isRestoring && restoringItemId == item.Id)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Restoring...</span>
+                            </span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        }
+                        Restore
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (paginatedResult.TotalPages > 1)
+    {
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="paginatedResult.TotalPages"
+                    HasPreviousPage="paginatedResult.HasPreviousPage"
+                    HasNextPage="paginatedResult.HasNextPage"
+                    OnPageChanged="ChangePage" />
+    }
+}
+
+<ConfirmationModal Visible="showDeleteModal"
+                   Title="Clear All"
+                   Body="Are you sure you want to permanently delete all items? Any changes made after the last sync will remain unaffected."
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   OnConfirm="ConfirmDelete"
+                   OnCancel="() => showDeleteModal = false" />
+
+@code {
+    private PaginatedResult<DeletedItem>? paginatedResult;
+    private bool isLoading = true;
+    private bool isRestoring = false;
+    private string restoringItemId = string.Empty;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private ITriggerSource triggerSource = null!;
+    private bool showDeleteModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDeletedItems();
+
+        triggerSource = TriggerSourceFactory.CreateTriggerSource(5000, async () =>
+        {
+            await InvokeAsync(() =>
+            {
+                successMessage = string.Empty;
+                StateHasChanged();
+            });
+        });
+    }
+
+    private async Task LoadDeletedItems()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            paginatedResult = await RestoreService.GetDeletedItemsAsync(currentPage, pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load deleted items: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RestoreItem(string itemId, DeletedItemType itemType, string? itemTitle = null)
+    {
+        if (isRestoring) return;
+
+        isRestoring = true;
+        restoringItemId = itemId;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var success = await RestoreService.RestoreItemAsync(itemId, itemType);
+
+            if (success)
+            {
+                successMessage = $"<span class=\"fw-semibold\">{itemTitle}</span> restored successfully!";
+
+                // If current page becomes empty after restoration, go to previous page
+                if (paginatedResult?.Items.Count == 1 && currentPage > 1)
+                {
+                    currentPage--;
+                }
+
+                await LoadDeletedItems();
+
+                // Hide success message after 3 seconds
+                triggerSource.Start();
+            }
+            else
+            {
+                errorMessage = "Failed to restore item. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to restore item: {ex.Message}";
+        }
+        finally
+        {
+            isRestoring = false;
+            restoringItemId = string.Empty;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= (paginatedResult?.TotalPages ?? 1))
+        {
+            currentPage = page;
+            await LoadDeletedItems();
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        showDeleteModal = false;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await RestoreService.HardRemoveAll();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to clear items: {ex.Message}";
+        }
+
+        await LoadDeletedItems();
+    }
+}

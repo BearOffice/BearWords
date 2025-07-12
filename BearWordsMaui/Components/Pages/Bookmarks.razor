@@ -1,0 +1,211 @@
+﻿@page "/bookmarks"
+@using Microsoft.AspNetCore.Components
+@inject BookmarkService BookmarkService
+@inject IDateTimeService DateTimeService
+@inject LanguageService LanguageService
+@inject NavigationManager Navigation
+@inject ITempStorageService TempStorageService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Bookmarks</h2>
+    <button class="btn btn-primary me-2" @onclick="NavToSearch">
+        <i class="bi bi-search"></i>
+    </button>
+</div>
+
+<ErrorAlert Message="@errorMessage" />
+
+<!-- Language Tabs -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link @(selectedLanguage == "ALL" ? "active" : "")"
+           @onclick="@(() => OnLanguageChanged("ALL"))" @onclick:preventDefault="true">ALL</a>
+    </li>
+    @if (languages is not null)
+    {
+        @foreach (var language in languages)
+        {
+            <li class="nav-item">
+                <a class="nav-link @(selectedLanguage == language.LanguageCode ? "active" : "")"
+                   @onclick="@(() => OnLanguageChanged(language.LanguageCode))" @onclick:preventDefault="true">
+                    @language.LanguageCode
+                </a>
+            </li>
+        }
+    }
+</ul>
+
+<!-- Controls -->
+<div class="row mb-3">
+    <div class="col-md-6 mb-2 mb-md-0">
+        <label for="sortSelect" class="form-label me-2">Sort:</label>
+        <select id="sortSelect" class="form-select d-inline-block" style="width: auto;" @bind="selectedSort" @bind:after="OnSortChanged">
+            <option value="@SortOption.Modified">Modified Time</option>
+            <option value="@SortOption.ModifiedAsc">Modified Time (Asc)</option>
+            <option value="@SortOption.Alphabetical">Alphabetically</option>
+            <option value="@SortOption.AlphabeticalDesc">Alphabetically (Desc)</option>
+        </select>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No bookmarks found.</p>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var bookmark in paginatedResult.Items)
+        {
+            <div class="col-md-6">
+                <BookmarkCard Bookmark="bookmark" 
+                              Unbookmark="() => {
+                                  selectedBookmarkId = bookmark.BookmarkId; 
+                                  showConfirmModal = true; }"
+                              OnClick="() => NavToWordDetail(bookmark.WordId)" />
+            </div>
+        }
+    </div>
+
+    @if (paginatedResult.TotalPages > 1)
+    {
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="paginatedResult.TotalPages"
+                    HasPreviousPage="paginatedResult.HasPreviousPage"
+                    HasNextPage="paginatedResult.HasNextPage"
+                    OnPageChanged="ChangePage" />
+    }
+}
+
+<ConfirmationModal Title="Unbookmark confirm"
+                   Body="Unbookmark this word? The tags and notes of the bookmark will be removed."
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   Visible="@showConfirmModal"
+                   OnConfirm="@(async () => {showConfirmModal = false; await UnBookmark();})"
+                   OnCancel="() => showConfirmModal = false" />
+
+@code {
+    private Language[]? languages;
+    private PaginatedResult<Bookmark>? paginatedResult;
+    private string selectedLanguage = "ALL";
+    private SortOption selectedSort = SortOption.Modified;
+    private bool isLoading = true;
+    private string? selectedBookmarkId;
+    private bool showConfirmModal;
+    private string errorMessage = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 30;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedLanguage = TempStorageService.Peek<string>("bookmarks_lang") ?? "ALL";
+        currentPage = TempStorageService.Peek<int?>("bookmarks_page") ?? 1;
+
+        await LoadLanguages();
+        await LoadBookmarks();
+    }
+
+    private async Task LoadLanguages()
+    {
+        try
+        {
+            languages = await LanguageService.GetLanguagesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load languages: {ex.Message}";
+        }
+    }
+
+    private async Task LoadBookmarks()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        try
+        {
+            paginatedResult = await BookmarkService.GetBookmarksAsync(
+                    selectedLanguage == "ALL" ? null : selectedLanguage,
+                    selectedSort,
+                    currentPage,
+                    pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load bookmarks: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnLanguageChanged(string language)
+    {
+        selectedLanguage = language;
+        currentPage = 1;
+        await LoadBookmarks();
+
+        TempStorageService.Push("bookmarks_lang", language);
+    }
+
+    private async Task OnSortChanged()
+    {
+        currentPage = 1;
+        await LoadBookmarks();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= (paginatedResult?.TotalPages ?? 1))
+        {
+            currentPage = page;
+            await LoadBookmarks();
+        }
+
+        TempStorageService.Push("bookmarks_page", currentPage);
+    }
+
+    private async Task UnBookmark()
+    {
+        if (!string.IsNullOrEmpty(selectedBookmarkId))
+        {
+            try
+            {
+                await BookmarkService.UnBookmarkAsync(selectedBookmarkId);
+
+                // If current page becomes empty after deletion, go to previous page
+                if (paginatedResult?.Items.Count == 1 && currentPage > 1)
+                {
+                    currentPage--;
+                }
+
+                await LoadBookmarks();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to unbookmark: {ex.Message}";
+            }
+            finally
+            {
+                selectedBookmarkId = null;
+            }
+        }
+    }
+
+    private void NavToWordDetail(int wordId)
+    {
+        Navigation.NavigateTo($"/word/{wordId}");
+    }
+
+    private void NavToSearch()
+    {
+        var inputHint = Uri.EscapeDataString("Search bookmarked words...");
+        Navigation.NavigateTo($"/search?mode=bookmark&inputHint={inputHint}");
+    }
+}

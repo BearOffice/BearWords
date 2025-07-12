@@ -1,0 +1,52 @@
+﻿@page "/logs"
+@inject NavigationManager Navigation
+@inject ILogService LogService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>System Logs</h2>
+    <button class="btn btn-primary me-2" @onclick="ClearLogs" disabled="@isClearing">
+        <i class="bi bi-trash2"></i>
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body pb-0">
+        @if (isLoading)
+        {
+            <Placeholder />
+        }
+        else if (string.IsNullOrWhiteSpace(log))
+        {
+            <div class="text-center text-muted">
+                <p>No log is found.</p>
+            </div>
+        }
+        else
+        {
+            <p class="pb-3 mb-0" style="white-space: pre-wrap; font-family: Consolas, monospace;">@log</p>
+        }
+    </div>
+</div>
+
+
+@code {
+    private bool isLoading = true;
+    private string log = string.Empty;
+    private bool isClearing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        log = await Task.Run(() => LogService.GetLogs());
+        isLoading = false;
+    }
+
+    private async Task ClearLogs()
+    {
+        isClearing = true;
+
+        await Task.Run(() => LogService.ClearLogs());
+        log = string.Empty;
+
+        isClearing = false;
+    }
+}

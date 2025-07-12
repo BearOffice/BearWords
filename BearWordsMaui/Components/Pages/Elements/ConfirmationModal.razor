@@ -1,0 +1,46 @@
+﻿<div class="modal fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@Title</h5>
+                <button type="button" class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                <p>@Body</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+                @switch (BtnType)
+                {
+                    case ModalButtonType.Danger:
+                        <button type="button" class="btn btn-danger" @onclick="OnConfirm">Delete</button>
+                        break;
+                    case ModalButtonType.Warning:
+                        <button type="button" class="btn btn-warning" @onclick="OnConfirm">Confirm</button>
+                        break;
+                    default:
+                        <button type="button" class="btn btn-primary" @onclick="OnConfirm">Confirm</button>
+                        break;
+                }
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");"></div>
+
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Body { get; set; } = string.Empty;
+    [Parameter] public ModalButtonType BtnType { get; set; } = ModalButtonType.Danger;
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    public enum ModalButtonType
+    {
+        Danger,
+        Warning,
+        Primary
+    }
+}

@@ -1,0 +1,114 @@
+﻿@page "/login"
+@inject NavigationManager Navigation
+@inject ConfigService ConfigService
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card mt-5">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Login</h2>
+                <div class="alert alert-warning @(showLoginError ? "" : "d-none")" role="alert">
+                    <i class="bi bi-info-circle"></i> <span id="login-error">@errorMessage</span>
+                </div>
+                <form @onsubmit="SubmitLogin" @onsubmit:preventDefault="true">
+                    <div class="mb-3">
+                        <label for="api-endpoint" class="form-label">
+                            API Endpoint
+                            <i class="bi bi-info-circle text-primary" data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="Enter your server endpoint URL (e.g., https://192.168.0.100:5000)"></i>
+                        </label>
+                        <input type="url" class="form-control" id="api-endpoint"
+                               placeholder="https://192.168.0.100:5000" @bind="apiEndpoint" @bind:event="oninput">
+                    </div>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username"
+                               placeholder="Enter username" @bind="username" @bind:event="oninput">
+                    </div>
+                    <div class ="mb-3">
+                        <div class="form-check form-switch d-flex align-items-center">
+                            <input class="form-check-input" type="checkbox" id="ssl-bypass-toggle"
+                                   @bind="sslBypassEnabled">
+                            <label class="form-check-label ms-2" for="ssl-bypass-toggle">
+                                Bypass SSL Validation
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">
+                            Enable this option to bypass SSL certificate validation.
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        Login
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+
+@code {
+    private string apiEndpoint = string.Empty;
+    private string username = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool showLoginError = false;
+    private bool sslBypassEnabled;
+
+    protected override void OnInitialized()
+    {
+        var history = ConfigService.PeekLoginHistory();
+        if (history is not null)
+        {
+            apiEndpoint = history.ApiEndpoint ?? string.Empty;
+        }
+
+        sslBypassEnabled = ConfigService.ByPassSslValidation;
+    }
+
+    private void SubmitLogin()
+    {
+        errorMessage = string.Empty;
+        showLoginError = false;
+
+        ConfigService.ByPassSslValidation = sslBypassEnabled;
+
+        if (string.IsNullOrWhiteSpace(apiEndpoint))
+        {
+            errorMessage = "API Endpoint is required.";
+            showLoginError = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            errorMessage = "Username is required.";
+            showLoginError = true;
+            return;
+        }
+
+        if (username.Length > 30)
+        {
+            errorMessage = "Username is to long.";
+            showLoginError = true;
+            return;
+        }
+
+        if (!Uri.TryCreate(apiEndpoint.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != "http" && uri.Scheme != "https"))
+        {
+            errorMessage = "Please enter a valid URL (e.g., https://192.168.0.100:5000).";
+            showLoginError = true;
+            return;
+        }
+
+        var userQuery = Uri.EscapeDataString(username.Trim());
+        var apiEndpointQuery = Uri.EscapeDataString(apiEndpoint.Trim());
+        Navigation.NavigateTo($"/init?user={userQuery}&endpoint={apiEndpointQuery}", replace: true);
+    }
+}

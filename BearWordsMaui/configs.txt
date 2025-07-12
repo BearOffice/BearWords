@@ -1,0 +1,35 @@
+user_name: 
+
+client_id: 
+
+api_endpoint: 
+
+bypass_ssl_validation: True
+
+sync_action: OnStart
+
+theme: Unspecified
+
+database: bear_words.db
+
+log: log.txt
+
+> special data <
+indicator: @Func
+
+dic: $
+  tag_hint: @Tag Hint
+
+> temp <
+last_sync: 
+
+sync_status: Finished
+
+last_push_count: 0
+
+last_pull_count: 0
+
+hide_deleted_item_before: 0
+
+login_histories: 
+  []

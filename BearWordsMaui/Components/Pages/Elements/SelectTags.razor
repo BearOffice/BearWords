@@ -1,0 +1,81 @@
+﻿@inject TagHintService TagHintService
+
+<div class="d-flex align-items-center mb-2">
+    <h5 class="me-3 mb-0">Tags</h5>
+    <button class="btn btn-sm btn-outline-primary me-2" @onclick="ShowSelectTagModal">
+        <i class="bi bi-check2-square"></i> Select
+    </button>
+    <button class="btn btn-sm btn-outline-primary" @onclick="SetTagsByHints">
+        <i class="bi bi-lightbulb"></i>
+    </button>
+</div>
+
+<div class="mb-2">
+    @foreach (var bookmarkTag in SelectedTags.OrderBy(t => t.TagName))
+    {
+        <span class="badge bg-secondary me-2 activated">
+            @bookmarkTag.TagName
+            <i class="bi bi-x" style="cursor: pointer;"
+               @onclick="() => RemoveTag(bookmarkTag.TagId)"></i>
+        </span>
+    }
+</div>
+
+<SelectTagModal Visible="@showSelectTagModal"
+                TagCategories="@TagCategories"
+                PreSelectedTagIds="@preSelectedTagIds"
+                OnTagsSelected="OnTagsSelected"
+                OnClose="() => showSelectTagModal = false"
+                OnNavigate="OnNavigate" />
+
+@code {
+    [Parameter, EditorRequired] public TagCategory[] TagCategories { get; set; }
+    [Parameter, EditorRequired] public List<Tag> SelectedTags { get; set; }
+    [Parameter] public string? TagHintKeyword { get; set; }
+    [Parameter] public EventCallback<string[]> OnSelectChanged { get; set; }
+    [Parameter] public EventCallback OnNavigate { get; set; }
+
+    private bool showSelectTagModal;
+    private string[] preSelectedTagIds = [];
+
+    private void ShowSelectTagModal()
+    {
+        preSelectedTagIds = SelectedTags.Select(t => t.TagId).ToArray();
+        showSelectTagModal = true;
+    }
+
+    private async Task SetTagsByHints()
+    {
+        if (TagHintKeyword is null) return;
+
+        var hints = TagHintService.GetTagHints(TagHintKeyword);
+        var select = SelectedTags.Select(t => t.TagId).Union(hints).ToArray();
+
+        await OnTagsSelected(select);
+    }
+
+    private async Task OnTagsSelected(string[] tagIds)
+    {
+        var allTags = TagCategories.SelectMany(tc => tc.Tags);
+
+        SelectedTags.Clear();
+        foreach (var tag in allTags)
+        {
+            if (tagIds.Contains(tag.TagId))
+            {
+                SelectedTags.Add(tag);
+            }
+        }
+
+        StateHasChanged();
+
+        if (OnSelectChanged.HasDelegate)
+            await OnSelectChanged.InvokeAsync(SelectedTags.Select(t => t.TagId).ToArray());
+    }
+
+    private void RemoveTag(string tagId)
+    {
+        SelectedTags.RemoveAll(t => t.TagId == tagId);
+        StateHasChanged();
+    }
+}

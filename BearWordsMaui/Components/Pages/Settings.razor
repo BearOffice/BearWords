@@ -1,0 +1,310 @@
+﻿@page "/settings"
+@using Microsoft.Maui.ApplicationModel;
+@inject ConfigService ConfigService
+@inject NavigationManager Navigation
+@inject BasicInfoService BasicInfoService
+@inject IInitService InitService
+@inject ISyncExecService SyncExecService
+@inject IJSRuntime JSRuntime
+
+<h2 class="mb-4">Settings</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+<div class="card mb-3">
+    <div class="card-body pb-2">
+        <div class="row mb-2">
+            <div class="col-sm-2 fw-semibold">Username:</div>
+            <div class="col-sm-8">@ConfigService.UserName</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-sm-2 fw-semibold">Client ID:</div>
+            <div class="col-sm-8">@ConfigService.ClientId</div>
+        </div>
+
+        <div class="mb-1">
+            <button class="btn btn-outline-secondary me-1 mb-1"
+                    @onclick="@(() => Navigation.NavigateTo("/logs"))">
+                <i class="bi bi-file-text me-1"></i>
+                Logs
+            </button>
+            <button class="btn btn-outline-secondary me-1 mb-1"
+                    @onclick="@(() => Navigation.NavigateTo("/conflicts"))">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Conflicts
+            </button>
+            <button class="btn btn-outline-secondary me-1 mb-1"
+                    @onclick="@(() => Navigation.NavigateTo("/recycle-bin"))">
+                <i class="bi bi-trash me-1"></i>
+                Recycle bin
+            </button>
+            <button class="btn btn-outline-success me-1 mb-1"
+                    @onclick="@(() => Navigation.NavigateTo("/import"))">
+                <i class="bi bi-box-arrow-in-down-left me-1"></i>
+                Import
+            </button>
+            <button class="btn btn-outline-success mb-1"
+                    @onclick="@(() => Navigation.NavigateTo("/export"))">
+                <i class="bi bi-box-arrow-up-right"></i>
+                Export
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Basic Info -->
+<div class="card mb-3">
+    <div class="card-body pt-1 pb-1">
+        <div class="row g-0">
+            <div class="col-md-4">
+                <div class="p-2 text-center hover-highlight">
+                    <div class="mb-2">
+                        <div class="icon-circle bg-danger bg-opacity-10 mx-auto mb-1">
+                            <i class="fas fa-book text-danger"></i>
+                        </div>
+                    </div>
+                    <h3 class="mb-1 fw-bold text-danger">@wordCount.ToString("N0")</h3>
+                    <p class="text-muted mb-0 small">Dictionary Words</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 text-center hover-highlight">
+                    <div class="mb-2">
+                        <div class="icon-circle bg-primary bg-opacity-10 mx-auto mb-1">
+                            <i class="fas fa-bookmark text-primary"></i>
+                        </div>
+                    </div>
+                    <h3 class="mb-1 fw-bold text-primary">@bookmarkCount.ToString("N0")</h3>
+                    <p class="text-muted mb-0 small">Bookmarks</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 text-center hover-highlight">
+                    <div class="mb-2">
+                        <div class="icon-circle bg-warning bg-opacity-10 mx-auto mb-1">
+                            <i class="fas fa-quote-left text-warning"></i>
+                        </div>
+                    </div>
+                    <h3 class="mb-1 fw-bold text-warning">@phraseCount.ToString("N0")</h3>
+                    <p class="text-muted mb-0 small">Phrases</p>
+                </div>
+            </div>
+        </div>
+        <hr class="my-0">
+        <div class="row g-0">
+            <div class="col-md-6">
+                <div class="p-2 text-center hover-highlight">
+                    <div class="mb-2">
+                        <div class="icon-circle bg-success bg-opacity-10 mx-auto mb-1">
+                            <i class="fas fa-layer-group text-success"></i>
+                        </div>
+                    </div>
+                    <h3 class="mb-1 fw-bold text-success">@tagCategoryCount.ToString("N0")</h3>
+                    <p class="text-muted mb-0 small">Tag Categories</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-2 text-center hover-highlight">
+                    <div class="mb-2">
+                        <div class="icon-circle bg-info bg-opacity-10 mx-auto mb-1">
+                            <i class="fas fa-tags text-info"></i>
+                        </div>
+                    </div>
+                    <h3 class="mb-1 fw-bold text-info">@tagCount.ToString("N0")</h3>
+                    <p class="text-muted mb-0 small">Tags</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Sync Settings</h5>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="syncOption" id="syncEvery"
+                   checked="@(selectedSyncAction == SyncAction.OnAction)"
+                   @onchange="@(() => OnSyncActionChanged(SyncAction.OnAction))">
+            <label class="form-check-label" for="syncEvery">
+                Sync on every action
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="syncOption" id="syncOpen"
+                   checked="@(selectedSyncAction == SyncAction.OnStart)"
+                   @onchange="@(() => OnSyncActionChanged(SyncAction.OnStart))">
+            <label class="form-check-label" for="syncOpen">
+                Sync on app open
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="syncOption" id="syncManual"
+                   checked="@(selectedSyncAction == SyncAction.Manual)"
+                   @onchange="@(() => OnSyncActionChanged(SyncAction.Manual))">
+            <label class="form-check-label" for="syncManual">
+                Manual sync only
+            </label>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">API Configuration</h5>
+        <div class="mb-3">
+            <label for="settings-api" class="form-label fw-semibold">API Endpoint</label>
+            <input type="url" class="form-control" id="settings-api"
+                   @bind="apiEndpoint" @bind:event="oninput" @onblur="OnApiEndpointChanged">
+        </div>
+        <div>
+            <div class="form-check form-switch d-flex align-items-center">
+                <input class="form-check-input" type="checkbox" id="ssl-bypass-toggle"
+                       checked="sslBypassEnabled" @onchange="OnSslBypassChanged">
+                <label class="form-check-label ms-2" for="ssl-bypass-toggle">
+                    Bypass SSL Validation
+                </label>
+            </div>
+            <small class="form-text text-muted">
+                Enable this option to bypass SSL certificate validation.
+            </small>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Theme</h5>
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="theme" id="theme-light" autocomplete="off"
+                   checked="@(selectedTheme == AppTheme.Light)"
+                   @onchange="@(() => OnThemeChanged(AppTheme.Light))">
+            <label class="btn btn-outline-primary" for="theme-light">
+                <i class="bi bi-sun"></i> Light
+            </label>
+            <input type="radio" class="btn-check" name="theme" id="theme-dark" autocomplete="off"
+                   checked="@(selectedTheme == AppTheme.Dark)"
+                   @onchange="@(() => OnThemeChanged(AppTheme.Dark))">
+            <label class="btn btn-outline-primary" for="theme-dark">
+                <i class="bi bi-moon"></i> Dark
+            </label>
+            <input type="radio" class="btn-check" name="theme" id="theme-auto" autocomplete="off"
+                   checked="@(selectedTheme == AppTheme.Unspecified)"
+                   @onchange="@(() => OnThemeChanged(AppTheme.Unspecified))">
+            <label class="btn btn-outline-primary" for="theme-auto">
+                <i class="bi bi-circle-half"></i> Auto
+            </label>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row mb-2">
+            <div class="col-sm-2 fw-semibold">App version:</div>
+            <div class="col-sm-8">@AppInfo.VersionString</div>
+        </div>
+        <div>Made by <a class="link-primary" href="https://bearoffice.net" style="text-decoration: none;">Bear Office</a>.</div>
+    </div>
+</div>
+
+<button class="btn btn-danger" @onclick="Logout">
+    <i class="bi bi-box-arrow-right"></i> Logout
+</button>
+
+@code {
+    private SyncAction selectedSyncAction;
+    private AppTheme selectedTheme;
+    private string apiEndpoint = string.Empty;
+    private bool sslBypassEnabled;
+    private string errorMessage = string.Empty;
+
+    private int bookmarkCount = 0;
+    private int tagCategoryCount = 0;
+    private int tagCount = 0;
+    private int phraseCount = 0;
+    private int wordCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedSyncAction = ConfigService.SyncAction;
+        selectedTheme = ConfigService.Theme;
+        apiEndpoint = ConfigService.ApiEndpoint ?? string.Empty;
+        sslBypassEnabled = ConfigService.ByPassSslValidation;
+
+        try
+        {
+            bookmarkCount = await Task.Run(async () => await BasicInfoService.GetBookmarkCountAsync());
+            tagCategoryCount = await Task.Run(async () => await BasicInfoService.GetTagCategoryCountAsync());
+            tagCount = await Task.Run(async () => await BasicInfoService.GetTagCountAsync());
+            phraseCount = await Task.Run(async () => await BasicInfoService.GetPhraseCountAsync());
+            wordCount = await Task.Run(async () => await BasicInfoService.GetWordCountAsync());
+        }
+        catch { }
+    }
+
+    private void OnSyncActionChanged(SyncAction syncAction)
+    {
+        selectedSyncAction = syncAction;
+
+        errorMessage = string.Empty;
+        ConfigService.SyncAction = syncAction;
+    }
+
+    private async Task OnThemeChanged(AppTheme theme)
+    {
+        selectedTheme = theme;
+
+        errorMessage = string.Empty;
+        ConfigService.Theme = theme;
+
+        await JSRuntime.InvokeVoidAsync("initializeThemeListener", theme.ToString().ToLower());
+        await JSRuntime.InvokeVoidAsync("applyTheme", theme.ToString().ToLower());
+    }
+
+    private void OnApiEndpointChanged()
+    {
+        if (SyncExecService.Status == SyncExecStatus.Running)
+        {
+            errorMessage = "Cannot change api endpoint while syncing.";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(apiEndpoint))
+        {
+            // Validate URL format
+            if (!Uri.TryCreate(apiEndpoint.Trim(), UriKind.Absolute, out var uri) ||
+                (uri.Scheme != "http" && uri.Scheme != "https"))
+            {
+                errorMessage = "Please enter a valid URL (e.g., https://192.168.0.100:5000).";
+                return;
+            }
+        }
+
+        errorMessage = string.Empty;
+        ConfigService.ApiEndpoint = apiEndpoint;
+    }
+
+    private void OnSslBypassChanged(ChangeEventArgs e)
+    {
+        sslBypassEnabled = (bool)(e.Value ?? false);
+        ConfigService.ByPassSslValidation = sslBypassEnabled;
+    }
+
+    private async Task Logout()
+    {
+        try
+        {
+            if (SyncExecService.Status == SyncExecStatus.Running)
+            {
+                throw new Exception("Cannot logout while syncing.");
+            }
+
+            await InitService.ClearState();
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Logout failed: {ex.Message}";
+        }
+    }
+}

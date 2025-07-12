@@ -1,0 +1,144 @@
+﻿@page "/export"
+@inject ExportService ExportService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<h2 class="mb-4">Export</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-primary" @onclick="ExportData" disabled="@isExporting">
+                @if (isExporting)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    <span>Exporting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-box-arrow-up-right me-2"></i>
+                    <span>Export</span>
+                }
+            </button>
+        </div>
+
+        @if (hasExportedData)
+        {
+            <div class="row">
+                <!-- Tag Categories Export -->
+                <div class="col-md-6 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 style="overflow-wrap: anywhere;">Tag Categories & Tags</h5>
+                        <button class="btn btn-outline-secondary btn-sm" 
+                            @onclick="() => CopyToClipboard(tagCategoryJson)">
+                            <i class="bi bi-clipboard me-1"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <textarea class="form-control" rows="20" readonly @bind="tagCategoryJson" 
+                              style="font-family: 'Consolas', 'Monaco', monospace; font-size: 0.875rem;"></textarea>
+                </div>
+
+                <!-- Bookmarks & Phrases Export -->
+                <div class="col-md-6 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 style="overflow-wrap: anywhere;">Bookmarks & Phrases</h5>
+                        <button class="btn btn-outline-secondary btn-sm" 
+                            @onclick="() => CopyToClipboard(bookmarkDataJson)">
+                            <i class="bi bi-clipboard me-1"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <textarea class="form-control" rows="20" readonly @bind="bookmarkDataJson"
+                              style="font-family: 'Consolas', 'Monaco', monospace; font-size: 0.875rem;"></textarea>
+                </div>
+            </div>
+        }
+
+        <!-- Format Information -->
+        <div class="mt-4">
+            <h6>Export Formats:</h6>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted">Tag Categories Format:</h6>
+                    <pre class="bg-light p-3 rounded"><code>[
+  {
+    "category": "Category Name",
+    "description": "a note for this category",
+    "tags": {
+      "tag1": "A tag note",
+      "tag2": null
+    }
+  }
+]</code></pre>
+                </div>
+                
+                <div class="col-md-6">
+                    <h6 class="text-muted">Bookmarks & Phrases Format:</h6>
+                    <pre class="bg-light p-3 rounded"><code>[
+  {
+    "lang": "en",
+    "title": "word or phrase text",
+    "alias": [],
+    "note": "optional note",
+    "tags": ["tag1", "tag2"]
+  }
+]</code></pre>
+                </div>
+            </div>
+            
+            <small class="text-muted">
+                <strong>Note:</strong> 
+                Bookmarked words and phrases are sorted by modification time from oldest to newest. 
+            </small>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? tagCategoryJson;
+    private string? bookmarkDataJson;
+    private string errorMessage = string.Empty;
+    private bool isExporting = false;
+    private bool hasExportedData = false;
+
+    private async Task ExportData()
+    {
+        isExporting = true;
+        errorMessage = string.Empty;
+        hasExportedData = false;
+        tagCategoryJson = null;
+        bookmarkDataJson = null;
+
+        try
+        {
+            var result = await Task.Run(async () => await ExportService.ExportAllDataAsync());
+            
+            tagCategoryJson = result.TagCategoryJson;
+            bookmarkDataJson = result.BookmarkDataJson;
+            hasExportedData = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            isExporting = false;
+        }
+    }
+
+    private async Task CopyToClipboard(string? text)
+    {
+        if (text is null) return;
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
+        catch {}
+    }
+}

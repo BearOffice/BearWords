@@ -1,0 +1,76 @@
+﻿@using BearWordsAPI.Shared.Data.Models
+@inject NavigationManager Navigation
+@inject ITempStorageService TempStorage
+
+<div class="modal fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tagModalTitle">Tag Details</h5>
+                <button type="button" class="btn-close" @onclick="OnClose"></button>
+            </div>
+            @if (Tag is not null)
+            {
+                <div class="modal-body">
+                    <h6>Tag Name</h6>
+                    <p>@Tag.TagName</p>
+                    <h6>Description</h6>
+                    @if (string.IsNullOrWhiteSpace(Tag.Description))
+                    {
+                        <p><em class="text-muted">No description found.</em></p>
+                    }
+                    else
+                    {
+                        <p style="white-space: pre-wrap;">@Tag.Description</p>
+                    }
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            @onclick="NavToSearch">
+                        <i class="bi bi-search"></i> Show words tagged with this.
+                    </button>
+                </div>
+                <div class="modal-footer @(ShowDeleteButton ? "d-flex justify-content-between" : "")">
+                    @if (ShowDeleteButton)
+                    {
+                        <button class="btn btn-danger" @onclick="OnDelete">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    }
+                    <div>
+                        <button type="button" class="btn btn-secondary" @onclick="OnClose">Close</button>
+                        <button type="button" class="btn btn-primary" @onclick="NavToTagEdit">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="text-center text-muted">
+                    <p>Tag not set.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");"></div>
+
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public Tag Tag { get; set; } = null!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public bool ShowDeleteButton { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    private void NavToTagEdit()
+    {
+        Navigation.NavigateTo($"/tag/edit/{Tag.TagId}");
+    }
+
+    private void NavToSearch()
+    {
+        var name = Uri.EscapeDataString(Tag.TagName);
+        var inputHint = Uri.EscapeDataString("Search words or phrases...");
+        Navigation.NavigateTo($"/search?keyword=&mode=tag&filter={name}&inputHint={inputHint}");
+    }
+}

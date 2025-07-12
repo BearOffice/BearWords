@@ -1,0 +1,43 @@
+﻿@inject NavigationManager Navigation
+@inject IDateTimeService DateTimeService
+
+<div class="card bookmark-card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1" @onclick="OnClick">
+                <div class="d-flex flex-wrap align-items-end mb-1" style="overflow-wrap: anywhere">
+                    <h5 class="card-title mb-0 me-2">@Bookmark.Word.Word</h5>
+                    @if (Bookmark.Word.Pronounce is not null)
+                    {
+                        <small>@Bookmark.Word.Pronounce</small>
+                    }
+                </div>
+                <div class="mb-2">
+                    <span class="badge bg-info me-1">@Bookmark.Word.SourceLanguage</span>
+                    @foreach (var bookmarkTag in Bookmark.BookmarkTags.OrderBy(bt => bt.Tag.TagName))
+                    {
+                        <span class="badge bg-secondary me-1">@bookmarkTag.Tag.TagName</span>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(Bookmark.Note))
+                {
+                    <p class="card-text mb-1 text-muted small" style="overflow-wrap: anywhere;">
+                        @Bookmark.Note.TruncateSmart(maxLength)
+                    </p>
+                }
+                <p class="text-muted small mb-0">Modified: @Bookmark.ModifiedAt.GetRelativeTime(DateTimeService)</p>
+            </div>
+            <button class="btn btn-sm btn-warning" @onclick="Unbookmark">
+                <i class="bi bi-bookmark-fill"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Bookmark Bookmark { get; set; } = null!;
+    [Parameter] public EventCallback Unbookmark { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private const int maxLength = 200;
+}

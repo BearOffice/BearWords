@@ -1,0 +1,49 @@
+﻿@inject NavigationManager Navigation
+@inject IDateTimeService DateTimeService
+@inject ConflictService ConflictService
+
+@if (conflictLogs is not null && conflictLogs.Items.Count != 0)
+{
+    <h5 class="mt-4">Conflict Log</h5>
+    <div class="list-group">
+        @foreach (var log in conflictLogs.Items)
+        {
+            <div class="list-group-item">
+                <small class="text-muted">@log.ReportedAt.GetRelativeTime(DateTimeService)</small>
+                <p class="text-muted mb-0"
+                   style="white-space: pre-wrap; font-family: Consolas, monospace; overflow-wrap: anywhere;">
+                    @log.Detail
+                </p>
+            </div>
+        }
+
+        @if (conflictLogs.TotalPages > 1)
+        {
+            <div class="list-group-item">
+                <div class="text-center">
+                    <i class="bi bi-three-dots"></i>
+                    <a style="cursor: pointer;" @onclick="NavToConflicts">Display more</a>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string TargetId { get; set; } = null!;
+    [Parameter] public int MaxItems { get; set; } = 1;
+
+    private PaginatedResult<ConflictContainer>? conflictLogs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        conflictLogs = await Task.Run(async () =>
+            await ConflictService.GetConflictsAsync(TargetId, 1, 1));
+    }
+
+    private void NavToConflicts()
+    {
+        var id = Uri.EscapeDataString(TargetId);
+        Navigation.NavigateTo($"/conflicts?targetId={id}");
+    }
+}

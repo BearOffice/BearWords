@@ -1,0 +1,159 @@
+﻿@using BearWordsAPI.Shared.Data.Models
+@using TriggerLib
+@inject NavigationManager Navigation
+@inject ITriggerSourceFactory TriggerSourceFactory
+@inject ITempStorageService TempStorage
+
+<div class="modal fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Tags</h5>
+                <button type="button" class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                <button type="button" class="btn btn-outline-secondary btn-sm mb-3" @onclick="NavToTagAdd">
+                    <i class="bi bi-plus-circle"></i> Create new tag
+                </button>
+
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Search tags..."
+                           @bind="searchText" @bind:event="oninput" @onkeyup="OnSearchInputChanged">
+                    <button class="btn btn-primary" type="button" @onclick="OnSearch">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+
+                @foreach (var tagCat in TagCategories)
+                {
+                    var tags = tagCat.Tags.Where(t => t.TagName.ToLower().Contains(filter)).ToList();
+
+                    @if (tags.Count != 0)
+                    {
+                        <div class="mb-2">
+                            <div class="category-header pb-0">
+                                <h5 class="mb-0">@tagCat.CategoryName</h5>
+                                <small class="text-muted mb-1">@tagCat.Description</small>
+                            </div>
+                            <div class="pt-2">
+                                @foreach (var tag in tags)
+                                {
+                                    <span class="badge tag-badge me-2 mb-2 @(IsTagSelected(tag.TagId) ? "selected" : "")"
+                                          style="cursor: pointer;"
+                                          @onclick="() => ToggleTagSelection(tag.TagId)">
+                                        @tag.TagName
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="OnAddTags">Add Tags</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade @(Visible ? "show" : "")" style="display: @(Visible ? "block" : "none");"></div>
+
+
+@code {
+    [Parameter, EditorRequired] public TagCategory[] TagCategories { get; set; }
+    [Parameter, EditorRequired] public string[] PreSelectedTagIds { get; set; }
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback OnNavigate { get; set; }
+    [Parameter] public EventCallback<string[]> OnTagsSelected { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private HashSet<string> selectedTagIds = new HashSet<string>();
+    private ITriggerSource triggerSource = null!;
+    private string searchText = string.Empty;
+    private string filter = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        triggerSource = TriggerSourceFactory.CreateTriggerSource(300, async () =>
+        {
+            await InvokeAsync(() =>
+            {
+                PerformSearch();
+                StateHasChanged();
+            });
+        });
+    }
+
+    protected override void OnParametersSet()
+    {
+        selectedTagIds.Clear();
+
+        foreach (var tagId in PreSelectedTagIds)
+        {
+            selectedTagIds.Add(tagId);
+        }
+    }
+
+    private void OnSearchInputChanged(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            OnSearch();
+            return;
+        }
+
+        // Debounce search input
+        triggerSource.Start();
+    }
+
+    private void OnSearch()
+    {
+        triggerSource.Cancel();
+        PerformSearch();
+    }
+
+    private void PerformSearch()
+    {
+        filter = searchText.ToLower();
+    }
+
+    private void ToggleTagSelection(string tagId)
+    {
+        if (selectedTagIds.Contains(tagId))
+            selectedTagIds.Remove(tagId);
+        else
+            selectedTagIds.Add(tagId);
+
+        StateHasChanged();
+    }
+
+    private bool IsTagSelected(string tagId)
+    {
+        return selectedTagIds.Contains(tagId);
+    }
+
+    private async Task OnAddTags()
+    {
+        if (OnTagsSelected.HasDelegate)
+            await OnTagsSelected.InvokeAsync([.. selectedTagIds]);
+
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task OnCancel()
+    {
+        selectedTagIds.Clear();
+
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task NavToTagAdd()
+    {
+        if (OnNavigate.HasDelegate)
+            await OnNavigate.InvokeAsync();
+
+        // Ensure the temp data of /tag/add is removed.
+        TempStorage.Remove("tag_add");
+        Navigation.NavigateTo("/tag/add");
+    }
+}

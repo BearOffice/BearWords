@@ -1,0 +1,40 @@
+@BearWordsAPI_HostAddress = http://localhost:8080
+@Client_Id = 95c63aeb-41b9
+@Token = Token
+
+POST {{BearWordsAPI_HostAddress}}/login
+Content-Type: application/json
+
+{
+  "userName": "admin"
+}
+
+###
+
+GET {{BearWordsAPI_HostAddress}}/items/dictionaries/150000
+Authorization: Bearer {{Token}}
+
+###
+
+POST {{BearWordsAPI_HostAddress}}/syncs/{{Client_Id}}/push
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+
+{
+  "pushDto": {
+    "phrases": [],
+    "phraseTags": [],
+    "bookmarks": [],
+    "bookmarkTags": [],
+    "tagCategories": [],
+    "tags": []
+  },
+  "overwrites": []
+}
+
+###
+
+Get {{BearWordsAPI_HostAddress}}/syncs/95c63aeb-41b9/server-time
+Authorization: Bearer {{Token}}
+
+###

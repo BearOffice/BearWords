@@ -1,0 +1,188 @@
+﻿@page "/phrase/edit/{PhraseId}"
+@inherits BasePageComponent
+@inject IDateTimeService DateTimeService
+@inject PhraseService PhraseService
+@inject LanguageService LanguageService
+@inject TagService TagService
+@inject ITempStorageService TempStorage
+
+<h2 class="mb-4">Edit Phrase</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <div class="card">
+        <div class="card-body">
+            <Placeholder />
+        </div>
+    </div>
+}
+else if (phrase is null)
+{
+    <div class="text-center text-muted">
+        <p>No phrase found.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="phrase-text" class="form-label">Phrase Text</label>
+                <input type="text" class="form-control" id="phrase-text" @bind="phraseText" @bind:event="oninput">
+            </div>
+
+            <div class="mb-2">
+                <label for="phrase-language" class="form-label">Language</label>
+                <select class="form-select" id="phrase-language" @bind="selectedLanguage">
+                    @if (languages != null)
+                    {
+                        @foreach (var language in languages)
+                        {
+                            <option value="@language.LanguageCode">@language.LanguageName (@language.LanguageCode)</option>
+                        }
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="phrase-details" class="form-label">Details</label>
+                <textarea class="form-control" id="phrase-details" rows="6"
+                          @bind="phraseNote" @bind:event="oninput"></textarea>
+            </div>
+
+            <div class="mb-4">
+                <SelectTags TagHintKeyword="@phraseText"
+                            TagCategories="@tagCategories"
+                            SelectedTags="@selectedTags"
+                            OnNavigate="SetTempStorage" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@isSaving" @onclick="SavePhrase">
+                    <i class="bi bi-save"></i> Save
+                </button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateToPrevious">
+                    <i class="bi bi-x-circle"></i> Discard
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <ConflictLogs TargetId="@PhraseId" />
+}
+
+@code {
+    [Parameter] public string PhraseId { get; set; } = null!;
+
+    private Phrase? phrase;
+    private Language[]? languages;
+    private TagCategory[] tagCategories = [];
+    private List<Tag> selectedTags = [];
+    private string phraseText = string.Empty;
+    private string selectedLanguage = "en";
+    private string? phraseNote;
+    private string errorMessage = string.Empty;
+    private bool isLoading = true;
+    private bool isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var data = TempStorage.Pop<PhraseData>("phrase_edit");
+        await LoadData(data);
+    }
+
+    private async Task LoadData(PhraseData? tempData = null)
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            phrase = await PhraseService.GetPhraseByIdAsync(PhraseId);
+            languages = await LanguageService.GetLanguagesAsync();
+            tagCategories = await TagService.GetTagCategoriesAsync();
+
+            if (phrase is not null)
+            {
+                if (tempData is not null)
+                {
+                    phraseText = tempData.PhraseText!;
+                    selectedLanguage = tempData.SelectedLanguage!;
+                    phraseNote = tempData.PhraseNote;
+                    selectedTags = tempData.SelectedTags!;
+                }
+                else
+                {
+                    phraseText = phrase.PhraseText;
+                    selectedLanguage = phrase.PhraseLanguage;
+                    phraseNote = phrase.Note;
+                    selectedTags = phrase.PhraseTags
+                        .Where(pt => !pt.DeleteFlag)
+                        .Select(bt => bt.Tag)
+                        .ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SavePhrase()
+    {
+        if (string.IsNullOrWhiteSpace(phraseText))
+        {
+            errorMessage = "Phrase text is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await PhraseService.UpdatePhraseAsync(
+                PhraseId,
+                phraseText.Trim(),
+                selectedLanguage,
+                string.IsNullOrWhiteSpace(phraseNote) ? null : phraseNote.Trim());
+            await PhraseService.UpdatePhraseTagAsync(PhraseId, selectedTags.Select(t => t.TagId).ToArray());
+
+            await NavigateToPrevious();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update phrase: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void SetTempStorage()
+    {
+        TempStorage.Push("phrase_edit", new PhraseData
+        {
+            SelectedLanguage = selectedLanguage,
+            PhraseText = phraseText,
+            PhraseNote = phraseNote,
+            SelectedTags = selectedTags,
+        });
+    }
+
+    private class PhraseData
+    {
+        internal string? SelectedLanguage { get; set; }
+        internal string? PhraseText { get; set; }
+        internal string? PhraseNote { get; set; }
+        internal List<Tag>? SelectedTags { get; set; }
+    }
+}

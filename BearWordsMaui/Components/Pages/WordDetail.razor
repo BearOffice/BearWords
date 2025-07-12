@@ -1,0 +1,230 @@
+﻿@page "/word/{WordId:int}"
+@inject NavigationManager Navigation
+@inject WordService WordService
+@inject ConfigService ConfigService
+@inject BookmarkService BookmarkService
+@inject IDateTimeService DateTimeService
+@inject IUUIDGenerator UUID
+
+<style>
+    .bi-chevron-right {
+        display: none;
+    }
+
+    .bi-chevron-down {
+        display: inline;
+    }
+
+    .collapsed .bi-chevron-down {
+        display: none;
+    }
+
+    .collapsed .bi-chevron-right {
+        display: inline;
+    }
+</style>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <div class="card">
+        <div class="card-body">
+            <Placeholder />
+        </div>
+    </div>
+}
+else if (dictionary is null)
+{
+    <div class="text-center text-muted">
+        <p>No word found.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2 class="card-title">@dictionary.Word</h2>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-info">@dictionary.SourceLanguage</span>
+                        @if (dictionary.Pronounce is not null)
+                        {
+                            <p class="lead mb-0">@dictionary.Pronounce</p>
+                        }
+                    </div>
+                </div>
+
+                <button class="btn @(isBookmarked ? "btn-warning" : "btn-outline-warning")"
+                        @onclick="async () =>
+                        {
+                            if (isBookmarked) showConfirmModal = true;
+                            else await ToggleBookmarkAsync();
+                        }">
+                      <i class="bi bi-bookmark-fill"></i>
+                  </button>
+              </div>
+
+            @if (isBookmarked)
+            {
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button id="bookmarkToggleBtn" class="btn btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#bookmarkContent"
+                            aria-expanded="true">
+                        <i class="bi bi-chevron-down"></i>
+                        <i class="bi bi-chevron-right"></i>
+                        <span class="ms-1">
+                            <i class="bi bi-bookmark-fill"></i> Details
+                        </span>
+                    </button>
+                    <a class="btn btn-primary"
+                       @onclick="@(() => Navigation.NavigateTo($"/bookmark/edit/{bookmark!.BookmarkId}"))">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </div>
+
+                <div class="collapse show" id="bookmarkContent">
+                    <div class="border-bottom mb-3">
+                        @if (bookmark!.BookmarkTags.Count == 0 && string.IsNullOrEmpty(bookmark.Note))
+                        {
+                            <div class="mb-2">
+                                <em class="text-muted">The tag and note are empty.</em>
+                            </div>
+                        }
+                        else
+                        {
+                            @if (bookmark!.BookmarkTags.Count != 0)
+                            {
+                                <div class="mb-3" style="overflow: hidden;">
+                                    <h5>Tags</h5>
+                                    @foreach (var bookmarkTag in bookmark!.BookmarkTags.OrderBy(bt => bt.Tag.TagName))
+                                    {
+                                        <span class="badge bg-secondary tag-badge me-2"
+                                                @onclick="() => {
+                                                selectedTag = bookmarkTag.Tag;
+                                                showTagModal = true; }">
+                                            @bookmarkTag.Tag.TagName
+                                        </span>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(bookmark.Note))
+                            {
+                                <div class="mb-2">
+                                    <h5>Notes</h5>
+                                    <p style="white-space: pre-wrap;">@bookmark.Note</p>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+
+        <div>
+            <h5>Translations</h5>
+            @if (translations is not null)
+            {
+                @for (var i = 0; i < translations.Length; i++)
+                {
+                    var trans = translations[i];
+                    <div class="card @(i != translations.Length - 1 ? "mb-2" : "")">
+                        <div class="card-body">
+                            <h6 class="border-bottom pb-2 d-flex align-items-center gap-2">
+                                <span class="badge bg-info">@trans.TargetLanguage</span>
+                                <span>@trans.TargetLanguageNavigation.LanguageName</span>
+                            </h6>
+                            <p class="mb-0" style="white-space: pre-wrap;">@trans.TranslationText</p>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <em class="text-muted">No translation is avaliable.</em>
+            }
+        </div>
+    </div>
+</div>
+}
+
+<ConfirmationModal Title="Unbookmark confirm"
+                   Body="Unbookmark this word? The tags and notes of the bookmark will be removed."
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   Visible="@showConfirmModal"
+                   OnConfirm="@(async () => {showConfirmModal = false; await ToggleBookmarkAsync();})"
+                   OnCancel="() => showConfirmModal = false" />
+
+<TagDetailModal Visible="@showTagModal"
+                Tag="@selectedTag"
+                OnClose="() => { showTagModal = false; selectedTag = null; }" />
+
+@code {
+    [Parameter] public int WordId { get; set; }
+
+    private Dictionary? dictionary;
+    private Translation[]? translations;
+    private Bookmark? bookmark;
+    private bool isBookmarked => bookmark is not null && !bookmark.DeleteFlag;
+    private bool isLoading = true;
+    private bool showConfirmModal;
+    private bool showTagModal;
+    private Tag? selectedTag;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWord();
+    }
+
+    private async Task LoadWord()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        try
+        {
+            dictionary = await WordService.GetWordAsync(WordId);
+
+            if (dictionary is null)
+            {
+                errorMessage = $"The certail word data (WordId: {WordId}) does not exist.";
+                return;
+            }
+
+            translations = [.. dictionary!.Translations];
+            bookmark = await WordService.GetBookmarkAsync(WordId);
+        }
+        catch
+        {
+            errorMessage = "Failed to load word data. Please try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleBookmarkAsync()
+    {
+        try
+        {
+            var isBookmarked = await WordService.ToggleBookmarkAsync(WordId);
+
+            if (isBookmarked)
+            {
+                bookmark = await WordService.GetBookmarkAsync(WordId);
+                await BookmarkService.AddTagHintsIfEmptyAsync(bookmark!.BookmarkId);
+                bookmark = await WordService.GetBookmarkAsync(WordId);  // Refresh 
+            }
+            else
+            {
+                bookmark = null;
+            }
+        }
+        catch
+        {
+            errorMessage = "Failed to update bookmark. Please try again.";
+        }
+    }
+}

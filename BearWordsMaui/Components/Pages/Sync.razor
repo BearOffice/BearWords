@@ -1,0 +1,178 @@
+﻿@page "/sync"
+@inject NavigationManager Navigation
+@inject ISyncUtils SyncUtils
+@inject ISyncExecService SyncExecService
+@inject IDateTimeService DateTimeService
+@implements IDisposable
+
+<div class="content-wrapper">
+    <div class="card status-card">
+        <div class="card-body text-center p-4">
+            <h3 class="card-title mb-3">Sync Data</h3>
+
+            <div class="mb-4">
+                <span class="badge @GetStatusBadgeClass() mb-3 px-3 py-2">
+                    <i class="@GetStatusBadgeIcon() me-1"></i>
+                    @GetStatusBadgeText()
+                </span>
+                <p class="text-muted mb-0">@GetStatusMessage()</p>
+                @if (SyncExecService.Status == SyncExecStatus.Idling)
+                {
+                    <p class="text-muted mt-1 mb-0 small">
+                        <i class="bi bi-lightbulb"></i> You can find the conflict items in setting page.
+                    </p>
+                }
+            </div>
+
+            @if (IsRunning)
+            {
+                <div class="mb-4">
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             style="width: 100%"></div>
+                    </div>
+                </div>
+            }
+
+            <div class="mb-4">
+                <button class="btn btn-primary" @onclick="HandleSyncAction">
+                    <i class="@GetActionButtonIcon() me-1"></i>
+                    @GetActionButtonText()
+                </button>
+            </div>
+
+            <div class="border-top pt-3">
+                <div class="row text-center">
+                    <div class="col-sm-3">
+                        <small class="text-muted">Last Sync:</small>
+                        <div class="fw-medium">@lastSyncTime</div>
+                    </div>
+                    <div class="col-sm-3">
+                        <small class="text-muted">Last Pulled:</small>
+                        <div class="fw-medium">@lastPullCount @(lastPullCount > 1 ? "Items" : "Item")</div>
+                    </div>
+                    <div class="col-sm-3">
+                        <small class="text-muted">Last Pushed:</small>
+                        <div class="fw-medium">@lastPushCount @(lastPushCount > 1 ? "Items" : "Item")</div>
+                    </div>
+                    <div class="col-sm-3">
+                        <small class="text-muted">To be Push:</small>
+                        <div class="fw-medium">@toBePushCount @(toBePushCount > 1 ? "Items" : "Item")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string lastSyncTime = string.Empty;
+    private int toBePushCount = 0;
+    private int lastPullCount = 0;
+    private int lastPushCount = 0;
+    private bool IsRunning => SyncExecService.Status == SyncExecStatus.Running;
+
+    protected override void OnInitialized()
+    {
+        SyncExecService.Changed += OnSyncStatusChanged;
+        LoadSyncData();
+    }
+
+    private void LoadSyncData()
+    {
+        toBePushCount = SyncUtils.GetToPushItemCount();
+        lastPullCount = SyncUtils.GetLastPullItemCount();
+        lastPushCount = SyncUtils.GetLastPushItemCount();
+
+        var lastSync = SyncUtils.GetLastSyncDateTime();
+        lastSyncTime = lastSync?.GetRelativeTime(DateTimeService) ?? "Never";
+    }
+
+    private void OnSyncStatusChanged(object? sender, SyncExecStatus status)
+    {
+        InvokeAsync(() =>
+        {
+            if (status != SyncExecStatus.Running)
+                LoadSyncData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleSyncAction()
+    {
+        if (SyncExecService.Status == SyncExecStatus.Running)
+        {
+            await SyncExecService.CancelAsync();
+        }
+        else
+        {
+            await SyncExecService.ExecuteAsync();
+        }
+
+        LoadSyncData();
+        StateHasChanged();
+    }
+
+    private string GetStatusBadgeClass()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Running => "bg-primary",
+            SyncExecStatus.Failed => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusBadgeIcon()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Failed => "bi bi-x-circle",
+            _ => "bi bi-clock"
+        };
+    }
+
+    private string GetStatusBadgeText()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Running => "In Progress",
+            SyncExecStatus.Failed => "Error",
+            _ => "Idle"
+        };
+    }
+
+    private string GetStatusMessage()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Failed => "Unable to synchronize data. Please check your connection and try again.",
+            SyncExecStatus.Running => "Synchronizing data.",
+            _ => "Click to synchronize data."
+        };
+    }
+
+    private string GetActionButtonIcon()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Running => "bi bi-x-circle",
+            _ => "bi bi-arrow-clockwise"
+        };
+    }
+
+    private string GetActionButtonText()
+    {
+        return SyncExecService.Status switch
+        {
+            SyncExecStatus.Running => "Cancel Sync",
+            SyncExecStatus.Failed => "Retry Sync",
+            _ => "Start Sync"
+        };
+    }
+
+    public void Dispose()
+    {
+        SyncExecService.Changed -= OnSyncStatusChanged;
+    }
+}

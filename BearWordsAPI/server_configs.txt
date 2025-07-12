@@ -1,0 +1,7 @@
+users: 
+  - admin
+
+# 256-bit length
+issuer_key: 
+
+database: data/bear_words.db

@@ -1,0 +1,63 @@
+﻿@page "/tag-category/add"
+@inherits BasePageComponent
+@inject TagService TagService
+
+<h2 class="mb-4">Add Tag Category</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+<div class="card">
+    <div class="card-body">
+        <div class="mb-2">
+            <label for="category-name" class="form-label">Category Name</label>
+            <input type="text" class="form-control" id="category-name" @bind="categoryName">
+        </div>
+
+        <div class="mb-3">
+            <label for="category-details" class="form-label">Details</label>
+            <textarea class="form-control" id="category-details" rows="6" @bind="description"></textarea>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" disabled="@isSaving" @onclick="OnSubmit">
+                <i class="bi bi-save"></i> Save
+            </button>
+            <button type="button" class="btn btn-secondary" @onclick="NavigateToPrevious">
+                <i class="bi bi-x-circle"></i> Discard
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string categoryName = string.Empty;
+    private string? description;
+    private bool isSaving = false;
+    private string errorMessage = string.Empty;
+
+    private async Task OnSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(categoryName))
+        {
+            errorMessage = "Category name is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await TagService.CreateTagCategoryAsync(categoryName, description);
+            await NavigateToPrevious();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to create tag category: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

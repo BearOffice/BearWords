@@ -1,0 +1,27 @@
+﻿@if (!string.IsNullOrEmpty(Message))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i> 
+        @if (AsRawHtml)
+        {
+            @((MarkupString)Message)
+        }
+        else
+        {
+            @Message
+        }
+        <button type="button" class="btn-close" @onclick="DismissAlert"></button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public bool AsRawHtml { get; set; }
+    [Parameter] public EventCallback<string> MessageChanged { get; set; }
+
+    private async Task DismissAlert()
+    {
+        Message = string.Empty;
+        await MessageChanged.InvokeAsync(Message);
+    }
+}

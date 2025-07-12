@@ -1,0 +1,91 @@
+﻿@inherits BasePageComponent
+@inject ScrollManager ScrollManager
+@inject ITempStorageService TempStorageService
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm pt-2 pb-2">
+    <div class="container">
+        <div class="d-flex align-items-center">
+            <a class="h6 text-white me-3 mb-0"
+               style="cursor: pointer;"
+                    @onclick="NavigateToPrevious">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <a class="navbar-brand ms-1" style="cursor: pointer;" @onclick="@(() => OnNavLinkClick("/", true))">
+                Bear Words
+            </a>
+        </div>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/", true)" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/", true))">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/bookmark")" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/bookmarks"))">Bookmarks</a>
+                </li>
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/phrase")" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/phrases"))">Phrases</a>
+                </li>
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/tag")" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/tags"))">Tags</a>
+                </li>
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/sync")" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/sync"))">Sync</a>
+                </li>
+                <li class="nav-item">
+                    <a class="@GetNavLinkClass("/settings")" style="cursor: pointer;"
+                       @onclick="@(() => OnNavLinkClick("/settings"))">Settings</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+@code {
+    private string currentUrl = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = Navigation.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    private async Task OnNavLinkClick(string url, bool replace = false)
+    {
+        await JSRuntime.InvokeVoidAsync("collapseNavbar");
+        await ScrollManager.ClearScrollPositions();
+        TempStorageService.RemoveAll();
+
+        Navigation.NavigateTo(url, replace: replace);
+    }
+
+    private string GetNavLinkClass(string href, bool matchAll = false)
+    {
+        bool isActive;
+
+        if (matchAll)
+            isActive = currentUrl == "" || currentUrl == "/";
+        else
+            isActive = currentUrl.StartsWith(href.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+
+        return isActive ? "nav-link active" : "nav-link";
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

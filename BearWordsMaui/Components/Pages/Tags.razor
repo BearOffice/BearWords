@@ -1,0 +1,273 @@
+﻿@page "/tags"
+@using TriggerLib
+@inject NavigationManager Navigation
+@inject TagService TagService
+@inject ITriggerSourceFactory TriggerSourceFactory
+@inject ITempStorageService TempStorageService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Tags</h2>
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="bi bi-plus"></i> Add
+        </button>
+        <ul class="dropdown-menu">
+            <li>
+                <a class="dropdown-item"
+                   @onclick="@(() => Navigation.NavigateTo("/tag-category/add"))">Category</a>
+            </li>
+            <li>
+                <a class="dropdown-item"
+                   @onclick="@(() => Navigation.NavigateTo("/tag/add"))">Tag</a>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<ErrorAlert Message="@errorMessage" />
+
+<div class="input-group mb-3">
+    <input type="text" class="form-control" placeholder="Search tags or categories..."
+           @bind="searchText" @bind:event="oninput" @onkeyup="OnSearchInputChanged">
+    <button class="btn btn-primary" type="button" @onclick="OnSearch">
+        <i class="bi bi-search"></i>
+    </button>
+</div>
+
+<!-- Controls -->
+<div class="row mb-3">
+    <div class="col-md-6 mb-2 mb-md-0">
+        <label for="sortSelect" class="form-label me-2">Sort:</label>
+        <select id="sortSelect" class="form-select d-inline-block" style="width: auto;"
+                @bind="selectedSort" @bind:after="OnSortChanged">
+            <option value="@SortOption.Alphabetical">Alphabetically</option>
+            <option value="@SortOption.AlphabeticalDesc">Alphabetically (Desc)</option>
+        </select>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No tag categories found.</p>
+    </div>
+}
+else
+{
+    <!-- Tag Categories -->
+    @foreach (var tagsContainer in paginatedResult.Items)
+    {
+        <div class="mb-4">
+            <div class="category-header">
+                <div class="d-flex justify-content-between align-items-start flex-wrap">
+                    <h4 class="me-2" style="flex: 1; min-width: 0;">@tagsContainer.CategoryName</h4>
+                    <div class="flex-shrink-0 d-flex flex-nowrap">
+                        <button class="btn btn-sm btn-danger me-1 mb-1"
+                                @onclick="() => { selectedTagCatId = tagsContainer.TagCategoryId; showTagCatDeleteModal = true; }">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary me-1 mb-1"
+                                @onclick="@(() => Navigation.NavigateTo($"tag-category/edit/{tagsContainer.TagCategoryId}"))">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm mb-1"
+                                @onclick="() => NavToSearch(tagsContainer.CategoryName)">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <p class="text-muted mb-0" style="white-space: pre-wrap;">@tagsContainer.Description</p>
+            </div>
+            <div class="mt-3" style="overflow: hidden;">
+                @if (tagsContainer.Tags.Any())
+                {
+                    @foreach (var tag in tagsContainer.Tags)
+                    {
+                        <span class="badge bg-secondary tag-badge fs-6 me-3 mb-2"
+                              @onclick="() => { selectedTag = tag; showTagDetailModal = true; }">
+                            @tag.TagName
+                        </span>
+                    }
+                }
+                else
+                {
+                    <em class="text-muted">No tag here.</em>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Pagination -->
+    @if (paginatedResult.TotalPages > 1)
+    {
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="paginatedResult.TotalPages"
+                    HasPreviousPage="paginatedResult.HasPreviousPage"
+                    HasNextPage="paginatedResult.HasNextPage"
+                    OnPageChanged="ChangePage" />
+    }
+}
+
+<TagDetailModal Visible="showTagDetailModal"
+                Tag="selectedTag" ShowDeleteButton="true"
+                OnClose="() => { showTagDetailModal = false; selectedTag = null; }"
+                OnDelete="() => { showTagDetailModal = false; showTagDeleteModal = true; }" />
+
+<ConfirmationModal Visible="showTagDeleteModal"
+                   Title="Delete tag"
+                   Body="Are you sure you want to delete this tag?"
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   OnConfirm="ConfirmTagDelete"
+                   OnCancel="() => { showTagDeleteModal = false; showTagDetailModal = true; }" />
+
+<ConfirmationModal Visible="showTagCatDeleteModal"
+                   Title="Delete tag category"
+                   Body="Are you sure you want to delete this tag category? All tags belong it will also be deleted."
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   OnConfirm="ConfirmTagCatDelete"
+                   OnCancel="() => showTagCatDeleteModal = false" />
+
+@code {
+    private PaginatedResult<TagsContainer>? paginatedResult;
+    private SortOption selectedSort = SortOption.Alphabetical;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+    private string searchText = string.Empty;
+    private int currentPage = 1;
+    private const int pageSize = 300;
+    private bool showTagDetailModal = false;
+    private bool showTagDeleteModal = false;
+    private bool showTagCatDeleteModal = false;
+    private Tag? selectedTag;
+    private string? selectedTagCatId;
+    private ITriggerSource triggerSource = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        searchText = TempStorageService.Peek<string>("tags_keyword") ?? string.Empty;
+        currentPage = TempStorageService.Peek<int?>("tags_page") ?? 1;
+
+        await LoadTagCategories();
+
+        triggerSource = TriggerSourceFactory.CreateTriggerSource(300, async () =>
+        {
+            await InvokeAsync(() =>
+            {
+                PerformSearch();
+                StateHasChanged();
+            });
+        });
+    }
+
+    private async Task LoadTagCategories()
+    {
+        isLoading = true;
+        try
+        {
+            paginatedResult = await TagService.GetTagCategoriesWithTagsAsync(
+                string.IsNullOrWhiteSpace(searchText) ? null : searchText,
+                selectedSort, currentPage, pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load tags: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnSearchInputChanged(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            OnSearch();
+            return;
+        }
+
+        // Debounce search input
+        triggerSource.Start();
+    }
+
+    private void OnSearch()
+    {
+        triggerSource.Cancel();
+        PerformSearch();
+    }
+
+    private void PerformSearch()
+    {
+        currentPage = 1;
+        _ = LoadTagCategories();
+
+        TempStorageService.Push("tags_page", currentPage);
+        TempStorageService.Push("tags_keyword", searchText);
+    }
+
+    private async Task OnSortChanged()
+    {
+        currentPage = 1;
+        await LoadTagCategories();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= (paginatedResult?.TotalPages ?? 1))
+        {
+            currentPage = page;
+            await LoadTagCategories();
+        }
+
+        TempStorageService.Push("tags_page", currentPage);
+    }
+
+    private async Task ConfirmTagDelete()
+    {
+        errorMessage = string.Empty;
+        try
+        {
+            await TagService.DeleteTagAsync(selectedTag!.TagId);
+
+            showTagDeleteModal = false;
+            showTagDetailModal = false;
+            selectedTag = null;
+
+            await LoadTagCategories();
+            // StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete tag: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmTagCatDelete()
+    {
+        errorMessage = string.Empty;
+        try
+        {
+            await TagService.DeleteTagCategoryAsync(selectedTagCatId!);
+
+            showTagCatDeleteModal = false;
+            await LoadTagCategories();
+            // StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete tag category: {ex.Message}";
+        }
+    }
+
+    private void NavToSearch(string name)
+    {
+        name = Uri.EscapeDataString(name);
+        var mode = Uri.EscapeDataString("tag category");
+        var inputHint = Uri.EscapeDataString("Search words or phrases...");
+        Navigation.NavigateTo($"/search?keyword=&mode={mode}&filter={name}&inputHint={inputHint}");
+    }
+}

@@ -1,0 +1,41 @@
+﻿<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item @(!HasPreviousPage ? "disabled" : "")">
+            <button class="page-link" @onclick="@(() => OnPageChanged.InvokeAsync(1))" disabled="@(!HasPreviousPage)">
+                <i class="bi bi-chevron-double-left"></i>
+            </button>
+        </li>
+        <li class="page-item @(!HasPreviousPage ? "disabled" : "")">
+            <button class="page-link" @onclick="@(() => OnPageChanged.InvokeAsync(CurrentPage - 1))" disabled="@(!HasPreviousPage)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        </li>
+        @for (int i = Math.Max(1, CurrentPage - 2); i <= Math.Min(TotalPages, CurrentPage + 2); i++)
+        {
+            var pageNumber = i;
+            <li class="page-item @(pageNumber == CurrentPage ? "active" : "")">
+                <button class="page-link" @onclick="@(() => OnPageChanged.InvokeAsync(pageNumber))">
+                    @pageNumber
+                </button>
+            </li>
+        }
+        <li class="page-item @(!HasNextPage ? "disabled" : "")">
+            <button class="page-link" @onclick="@(() => OnPageChanged.InvokeAsync(CurrentPage + 1))" disabled="@(!HasNextPage)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </li>
+        <li class="page-item @(!HasNextPage ? "disabled" : "")">
+            <button class="page-link" @onclick="@(() => OnPageChanged.InvokeAsync(TotalPages))" disabled="@(!HasNextPage)">
+                <i class="bi bi-chevron-double-right"></i>
+            </button>
+        </li>
+    </ul>
+</nav>
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public bool HasPreviousPage { get; set; }
+    [Parameter] public bool HasNextPage { get; set; }
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+}

@@ -1,0 +1,356 @@
+﻿@page "/search"
+@using TriggerLib
+@inject NavigationManager Navigation
+@inject SearchService SearchService
+@inject WordService WordService
+@inject ITriggerSourceFactory TriggerSourceFactory
+@inject ITempStorageService TempStorageService
+
+<h2>Search @(Mode is null ? "" : $"- {Mode.Capitalize()}")</h2>
+@if (!string.IsNullOrEmpty(Filter))
+{
+    <p class="mt-3 mb-4 pt-0">Filtered by <span class="fw-semibold">@Filter</span></p>
+}
+
+<div class="mt-4 mb-4">
+    <div class="input-group">
+        <input @ref="inputElement" type="text" class="form-control form-control"
+               placeholder="@InputHint" disabled="@disableInput"
+               @bind="searchText" @bind:event="oninput" @onkeyup="OnSearchInputChanged">
+        <button class="btn btn-primary" type="button" @onclick="OnSearch" disabled="@disableInput">
+            <i class="bi bi-search"></i>
+        </button>
+    </div>
+</div>
+<div class="list-group">
+    @foreach (var result in SearchResults)
+    {
+        @if (result.Type is SearchItemType.Phrase)
+        {
+            var phrase = result.Item as Phrase;
+            <div class="list-group-item">
+                <div class="flex-grow-1" style="overflow: hidden;"
+                     @onclick="() => NavToPhraseDetail(phrase!.PhraseId)">
+                    <h5 class="mb-0" style="overflow-wrap: anywhere">@phrase!.PhraseText</h5>
+                    <span class="badge bg-info">@phrase.PhraseLanguage</span>
+                    <span class="badge bg-danger me-1">Phrase</span>
+                    @foreach (var tag in result.TagNames)
+                    {
+                        <span class="badge bg-secondary me-1">@tag</span>
+                    }
+                </div>
+            </div>
+        }
+        else if (result.Type is SearchItemType.Word)
+        {
+            var dic = result.Item as Dictionary;
+            <div class="list-group-item">
+                <div class="flex-grow-1" style="overflow: hidden;"
+                     @onclick="() => NavToWordDetail(dic!.WordId)">
+                    <div class="d-flex flex-wrap align-items-end mb-1" style="overflow-wrap: anywhere">
+                        <h5 class="mb-0 me-2">@dic!.Word</h5>
+                        @if (dic.Pronounce is not null)
+                        {
+                            <small>@dic.Pronounce</small>
+                        }
+                    </div>
+                    <span class="badge bg-info me-1">@dic.SourceLanguage</span>
+                    @if (result.IsBookmarked)
+                    {
+                        <span class="badge bg-warning me-1">Bookmarked</span>
+                        @foreach (var tag in result.TagNames)
+                        {
+                            <span class="badge bg-secondary me-1">@tag</span>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    @if (disableInput)
+    {
+        <div class="list-group-item">
+            <div class="text-center">
+                <i class="bi bi-search"></i> Searching...
+            </div>
+        </div>
+    }
+    else if (showNoResults)
+    {
+        <div class="list-group-item">
+            <div class="text-center">
+                <i class="bi bi-search"></i> No results found
+            </div>
+        </div>
+
+        @if (Mode is null)
+        {
+            <div class="alert alert-warning mt-4">
+                <i class="bi bi-exclamation-triangle"></i> Word not found?
+                <a class="alert-link ms-1 me-1" style="cursor: pointer;" @onclick="NavToAddPhrase">
+                    Add it as a new phrase
+                </a>
+                or
+                <a class="alert-link ms-1" style="cursor: pointer;"
+                   href="https://www.google.com/search?q=@(Uri.EscapeDataString(searchText))">
+                    Search this word on Google
+                </a>
+            </div>
+        }
+    }
+    else if (SearchResults.Count == MaxResults)
+    {
+        <div class="list-group-item">
+            <div class="text-center">
+                <i class="bi bi-display"></i> Max @MaxResults results
+            </div>
+        </div>
+    }
+    else if (SearchResults.Count == 0)
+    {
+        <div class="list-group-item">
+            <div class="text-center">
+                <i class="bi bi-search"></i> Empty
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Keyword { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Mode { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Filter { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? InputHint { get; set; }
+
+    private ElementReference inputElement;
+    private string searchText = string.Empty;
+    private List<SearchResult> SearchResults = [];
+    private const int MaxResults = 50;
+    private const int DatabaseLimit = 150;
+    private ITriggerSource triggerSource = null!;
+    private bool showNoResults = false;
+    private bool disableInput = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Mode is not null)
+        {
+            Mode = Uri.UnescapeDataString(Mode).ToLower();
+        }
+        if (InputHint is not null)
+        {
+            InputHint = Uri.UnescapeDataString(InputHint);
+        }
+        else
+        {
+            InputHint = "Search words and phrases...";
+        }
+        if (Filter is not null)
+        {
+            Filter = Uri.UnescapeDataString(Filter);
+        }
+
+        var tempKeyword = TempStorageService.Pop<string>("search_keyword");
+        if (tempKeyword is not null)
+            searchText = tempKeyword;
+
+        if (string.IsNullOrEmpty(searchText) && Keyword is not null)
+        {
+            searchText = Uri.UnescapeDataString(Keyword);
+        }
+
+        // Display all tag / tag category in default
+        if (!string.IsNullOrEmpty(searchText) || Mode == "tag" || Mode == "tag category")
+        {
+            disableInput = true;
+            await Task.Run(PerformSearch);
+            disableInput = false;
+        }
+
+        triggerSource = TriggerSourceFactory.CreateTriggerSource(300, async () =>
+        {
+            await InvokeAsync(() =>
+            {
+                PerformSearch();
+                StateHasChanged();
+            });
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await inputElement.FocusAsync();
+        }
+    }
+
+    private void OnSearchInputChanged(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            OnSearch();
+            return;
+        }
+
+        // Debounce search input
+        triggerSource.Start();
+    }
+
+    private void OnSearch()
+    {
+        triggerSource.Cancel();
+        PerformSearch();
+    }
+
+    private void PerformSearch()
+    {
+        if (Mode is null)
+        {
+            SearchAll();
+        }
+        else
+        {
+            if (Mode == "phrase")
+                SearchPhrase();
+            else if (Mode == "bookmark")
+                SearchBookmarked();
+            else if (Mode == "tag")
+                SearchInTag();
+            else if (Mode == "tag category")
+                SearchInTagCat();
+        }
+
+        showNoResults = !string.IsNullOrEmpty(searchText) && SearchResults.Count == 0;
+
+        TempStorageService.Push("search_keyword", searchText);
+    }
+
+    private void SearchAll()
+    {
+        var phrases = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.Phrase,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+        var words = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.Word,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        SearchResults = phrases
+            .OrderByDescending(r => r.Similarity)
+                .ThenBy(r => ((Phrase)r.Item).PhraseText)
+            .Concat(words
+                .OrderByDescending(r => r.IsBookmarked)
+                .ThenByDescending(r => r.Similarity)
+                .ThenBy(r => ((Dictionary)r.Item).Word))
+            .Take(MaxResults)
+            .ToList();
+    }
+
+    private void SearchPhrase()
+    {
+        var phrases = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.Phrase,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        SearchResults = phrases
+            .OrderByDescending(r => r.Similarity)
+                .ThenBy(r => ((Phrase)r.Item).PhraseText)
+            .Take(MaxResults)
+            .ToList();
+    }
+
+    private void SearchBookmarked()
+    {
+        var words = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.BookmarkedWord,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        SearchResults = words
+            .OrderByDescending(r => r.Similarity)
+                .ThenBy(r => ((Dictionary)r.Item).Word)
+            .Take(MaxResults)
+            .ToList();
+    }
+
+    private void SearchInTag()
+    {
+        var words = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.WordInTag, Filter,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        var phrases = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.PhraseInTag, Filter,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        SearchResults = words
+            .Concat(phrases)
+            .OrderByDescending(r => r.Similarity)
+                .ThenBy(r =>
+                {
+                    if (r.Item is Dictionary d)
+                        return d.Word;
+                    else if (r.Item is Phrase p)
+                        return p.PhraseText;
+                    else
+                        return string.Empty;
+                })
+            .Take(MaxResults)
+            .ToList();
+    }
+
+    private void SearchInTagCat()
+    {
+        var words = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.WordInTagCategory, Filter,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        var phrases = SearchService.FuzzySearchAsync(
+            searchText, SearchItemType.PhraseInTagCategory, Filter,
+            maxResults: MaxResults, dbRetrieveLimit: DatabaseLimit).Result;
+
+        SearchResults = words
+            .Concat(phrases)
+            .OrderByDescending(r => r.Similarity)
+                .ThenBy(r =>
+                {
+                    if (r.Item is Dictionary d)
+                        return d.Word;
+                    else if (r.Item is Phrase p)
+                        return p.PhraseText;
+                    else
+                        return string.Empty;
+                })
+            .Take(MaxResults)
+            .ToList();
+    }
+
+    private void NavToWordDetail(int id)
+    {
+        Navigation.NavigateTo($"/word/{id}");
+    }
+
+    private void NavToPhraseDetail(string id)
+    {
+        Navigation.NavigateTo($"/phrase/{id}");
+    }
+
+    private void NavToAddPhrase()
+    {
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            Navigation.NavigateTo($"/phrase/add?text={Uri.EscapeDataString(searchText)}");
+        }
+    }
+}

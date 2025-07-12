@@ -1,0 +1,252 @@
+﻿@page "/phrases"
+@using BearWordsMaui.Components.Pages.Elements
+@inject NavigationManager Navigation
+@inject PhraseService PhraseService
+@inject LanguageService LanguageService
+@inject IDateTimeService DateTimeService
+@inject ITempStorageService TempStorageService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Phrases</h2>
+    <div>
+        <button class="btn btn-primary me-2" @onclick="NavToSearch">
+            <i class="bi bi-search"></i>
+        </button>
+        <button class="btn btn-primary" @onclick="@(() => Navigation.NavigateTo("/phrase/add"))">
+            <i class="bi bi-plus"></i> Phrase
+        </button>
+    </div>
+</div>
+
+<ErrorAlert Message="@errorMessage" />
+
+<!-- Language Tabs -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link @(selectedLanguage == "ALL" ? "active" : "")"
+           @onclick="@(() => OnLanguageChanged("ALL"))" @onclick:preventDefault="true">ALL</a>
+    </li>
+    @if (languages is not null)
+    {
+        @foreach (var language in languages)
+        {
+            <li class="nav-item">
+                <a class="nav-link @(selectedLanguage == language.LanguageCode ? "active" : "")"
+                   @onclick="@(() => OnLanguageChanged(language.LanguageCode))" @onclick:preventDefault="true">
+                    @language.LanguageCode
+                </a>
+            </li>
+        }
+    }
+</ul>
+
+<!-- Controls -->
+<div class="row mb-3">
+    <div class="col-md-6 mb-2 mb-md-0">
+        <label for="sortSelect" class="form-label me-2">Sort:</label>
+        <select id="sortSelect" class="form-select d-inline-block" style="width: auto;"
+                @bind="selectedSort" @bind:after="OnSortChanged">
+            <option value="@SortOption.Modified">Modified Time</option>
+            <option value="@SortOption.ModifiedAsc">Modified Time (Asc)</option>
+            <option value="@SortOption.Alphabetical">Alphabetically</option>
+            <option value="@SortOption.AlphabeticalDesc">Alphabetically (Desc)</option>
+        </select>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No phrases found.</p>
+    </div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var phrase in paginatedResult.Items)
+        {
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1" style="overflow: hidden;"
+                         @onclick="() => NavToPhraseDetail(phrase.PhraseId)">
+                        <h5 class="mb-1" style="overflow-wrap: anywhere;">@phrase.PhraseText</h5>
+                        <div class="mb-1">
+                            <span class="badge bg-info mb-0 me-1">@phrase.PhraseLanguage</span>
+                            @foreach (var pt in phrase.PhraseTags)
+                            {
+                                <span class="badge bg-secondary mb-0 me-1">@pt.Tag.TagName</span>
+                            }
+                        </div>
+                        <p class="text-muted small mt-1 mb-0">
+                            Modified: @phrase.ModifiedAt.GetRelativeTime(DateTimeService)
+                        </p>
+                        @if (!string.IsNullOrEmpty(phrase.Note))
+                        {
+                            <p class="text-muted small mb-0" style="overflow-wrap: anywhere;">
+                                Note: @phrase.Note.TruncateSmart(maxLength)
+                            </p>
+                        }
+                    </div>
+                    <button class="btn btn-sm btn-danger" @onclick="@(() => DeletePhrase(phrase.PhraseId))">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (paginatedResult.TotalPages > 1)
+    {
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="paginatedResult.TotalPages"
+                    HasPreviousPage="paginatedResult.HasPreviousPage"
+                    HasNextPage="paginatedResult.HasNextPage"
+                    OnPageChanged="ChangePage" />
+    }
+}
+
+<ConfirmationModal Visible="showDeleteModal"
+                   Title="Delete Phrase"
+                   Body="Are you sure you want to delete this phrase?"
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   OnConfirm="ConfirmDelete"
+                   OnCancel="CancelDelete" />
+
+@code {
+    private Language[]? languages;
+    private PaginatedResult<Phrase>? paginatedResult;
+    private bool isLoading = true;
+    private bool showDeleteModal = false;
+    private string phraseToDelete = string.Empty;
+    private string errorMessage = string.Empty;
+
+    private string selectedLanguage = "ALL";
+    private SortOption selectedSort = SortOption.Modified;
+    private int currentPage = 1;
+    private int pageSize = 30;
+    private int maxLength = 200;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedLanguage = TempStorageService.Peek<string>("phrases_lang") ?? "ALL";
+        currentPage = TempStorageService.Peek<int?>("phrases_page") ?? 1;
+
+        await LoadLanguages();
+        await LoadPhrases();
+    }
+
+    private async Task LoadLanguages()
+    {
+        try
+        {
+            languages = await LanguageService.GetLanguagesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load languages: {ex.Message}";
+        }
+    }
+
+    private async Task LoadPhrases()
+    {
+        isLoading = true;
+        errorMessage = string.Empty; // Clear previous errors
+        try
+        {
+            paginatedResult = await PhraseService.GetPhrasesAsync(
+                selectedLanguage == "ALL" ? null : selectedLanguage,
+                selectedSort, currentPage, pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load phrases: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnLanguageChanged(string language)
+    {
+        selectedLanguage = language;
+        currentPage = 1; // Reset to first page when changing filter
+        await LoadPhrases();
+
+        TempStorageService.Push("phrases_lang", language);
+    }
+
+    private async Task OnSortChanged()
+    {
+        currentPage = 1; // Reset to first page when changing sort
+        await LoadPhrases();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= (paginatedResult?.TotalPages ?? 1))
+        {
+            currentPage = page;
+            await LoadPhrases();
+        }
+
+        TempStorageService.Push("phrases_page", currentPage);
+    }
+
+    private void DeletePhrase(string phraseId)
+    {
+        phraseToDelete = phraseId;
+        showDeleteModal = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        showDeleteModal = false;
+        errorMessage = string.Empty; // Clear previous errors
+
+        if (!string.IsNullOrEmpty(phraseToDelete))
+        {
+            try
+            {
+                await PhraseService.DeletePhraseAsync(phraseToDelete);
+
+                // If current page becomes empty after deletion, go to previous page
+                if (paginatedResult?.Items.Count == 1 && currentPage > 1)
+                {
+                    currentPage--;
+                }
+
+                await LoadPhrases();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to delete phrase: {ex.Message}";
+            }
+            finally
+            {
+                phraseToDelete = string.Empty;
+            }
+        }
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteModal = false;
+        phraseToDelete = string.Empty;
+    }
+
+    private void NavToPhraseDetail(string id)
+    {
+        Navigation.NavigateTo($"/phrase/{id}");
+    }
+
+    private void NavToSearch()
+    {
+        var inputHint = Uri.EscapeDataString("Search phrases...");
+        Navigation.NavigateTo($"/search?mode=phrase&inputHint={inputHint}");
+    }
+}

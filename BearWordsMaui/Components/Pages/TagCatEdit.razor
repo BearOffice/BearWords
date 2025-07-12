@@ -1,0 +1,115 @@
+﻿@page "/tag-category/edit/{TagCatId}"
+@inherits BasePageComponent
+@inject TagService TagService
+
+<h2 class="mb-4">Edit Tag Category</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (tagCategory is null)
+{
+    <div class="text-center text-muted">
+        <p>No tag category found.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-2">
+                <label for="category-name" class="form-label">Category Name</label>
+                <input type="text" class="form-control" id="category-name" @bind="categoryName">
+            </div>
+
+            <div class="mb-3">
+                <label for="category-details" class="form-label">Details</label>
+                <textarea class="form-control" id="category-details" rows="6" @bind="description"></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@isSaving" @onclick="OnSubmit">
+                    <i class="bi bi-save"></i> Save
+                </button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateToPrevious">
+                    <i class="bi bi-x-circle"></i> Discard
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    [Parameter] public string TagCatId { get; set; } = null!;
+
+    private TagCategory? tagCategory;
+    private string categoryName = string.Empty;
+    private string? description;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTagCategory();
+    }
+
+    private async Task LoadTagCategory()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            tagCategory = await TagService.GetTagCategoryByIdAsync(TagCatId);
+
+            if (tagCategory is not null)
+            {
+                categoryName = tagCategory.CategoryName;
+                description = tagCategory.Description;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load tag category: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(categoryName))
+        {
+            errorMessage = "Category name is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await TagService.UpdateTagCategoryAsync(TagCatId, categoryName, description);
+            await NavigateToPrevious();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update tag category: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

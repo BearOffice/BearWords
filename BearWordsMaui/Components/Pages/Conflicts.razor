@@ -1,0 +1,105 @@
+﻿@page "/conflicts"
+@inject NavigationManager Navigation
+@inject ConflictService ConflictService
+@inject IDateTimeService DateTimeService
+
+<h2 class="mb-4">Conflicts</h2>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No conflicts found.</p>
+    </div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var conflict in paginatedResult.Items)
+        {
+            <div class="list-group-item">
+                <div class="mt-2">
+                    @if (!string.IsNullOrEmpty(conflict.TargetDisplayName))
+                    {
+                        <div class="mb-1" style="overflow-wrap: anywhere">
+                            <span class="fw-semibold">@conflict.TargetType</span> @conflict.TargetDisplayName
+                        </div>
+                    }
+                    <p class="text-muted small mb-0">Target ID: @conflict.TargetId</p>
+                    <p class="text-muted small mb-0">Reported At: @conflict.ReportedAt.GetRelativeTime(DateTimeService)</p>
+                    @if (!string.IsNullOrEmpty(conflict.Detail))
+                    {
+                        <p class="text-muted mb-1"
+                           style="white-space: pre-wrap; font-family: Consolas, monospace; overflow-wrap: anywhere;">
+                            @conflict.Detail
+                        </p>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (paginatedResult.TotalPages > 1)
+    {
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="paginatedResult.TotalPages"
+                    HasPreviousPage="paginatedResult.HasPreviousPage"
+                    HasNextPage="paginatedResult.HasNextPage"
+                    OnPageChanged="ChangePage" />
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? TargetId { get; set; }
+
+    private PaginatedResult<ConflictContainer>? paginatedResult;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 30;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConflicts();
+    }
+
+    private async Task LoadConflicts()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        if (TargetId is not null)
+        {
+            TargetId = Uri.UnescapeDataString(TargetId);
+        }
+
+        try
+        {
+            paginatedResult = await ConflictService.GetConflictsAsync(TargetId, currentPage, pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load conflicts: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= (paginatedResult?.TotalPages ?? 1))
+        {
+            currentPage = page;
+            await LoadConflicts();
+        }
+    }
+}

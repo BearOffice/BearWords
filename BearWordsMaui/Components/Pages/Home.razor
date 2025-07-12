@@ -1,0 +1,176 @@
+﻿@page "/"
+@inject NavigationManager Navigation
+@inject ConfigService ConfigService
+@inject BookmarkService BookmarkService
+@inject ScrollManager ScrollManager
+@inject ISyncExecService SyncExecService
+@inject ITempStorageService TempStorageService
+
+<div class="sticky-search">
+    <div class="input-group">
+        <input type="text" class="form-control form-control-lg" placeholder="Search words or phrases..."
+               @bind="searchText" @bind:event="oninput" @onkeypress="@(e => { if (e.Key == "Enter") NavToSearch(); })">
+        <button class="btn btn-primary" type="button" @onclick="NavToSearch">
+            <i class="bi bi-search"></i>
+        </button>
+    </div>
+</div>
+
+<div class="page-links mt-3 d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-primary" @onclick="@(() => OnNavLinkClick("/phrases"))">
+        <i class="bi bi-chat-quote"></i> Phrases
+    </a>
+    <a class="btn btn-outline-primary" @onclick="@(() => OnNavLinkClick("/bookmarks"))">
+        <i class="bi bi-bookmark"></i> Bookmarks
+    </a>
+    <a class="btn btn-outline-primary" @onclick="@(() => OnNavLinkClick("/tags"))">
+        <i class="bi bi-tags"></i> Tags
+    </a>
+    <a class="btn btn-outline-primary" @onclick="@(() => OnNavLinkClick("/sync"))">
+        @if (syncStatus == SyncExecStatus.Failed)
+        {
+            <i class="bi bi-x-circle"></i>
+        }
+        else if (syncStatus == SyncExecStatus.Running)
+        {
+            <i class="bi bi-arrow-repeat spin-icon"></i>
+        }
+        else
+        {
+            <i class="bi bi-arrow-repeat"></i>
+        }
+        Sync
+    </a>
+</div>
+
+<h3 class="mt-4 mb-3">Recently Added Bookmarks</h3>
+
+<ErrorAlert Message="@errorMessage" />
+
+@if (isLoading)
+{
+    <Placeholder />
+}
+else if (paginatedResult?.Items?.Any() != true)
+{
+    <div class="text-center text-muted">
+        <p>No bookmarks found.</p>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var bookmark in paginatedResult.Items)
+        {
+            <div class="col-md-6">
+                <BookmarkCard Bookmark="bookmark" 
+                              Unbookmark="() => {
+                                  selectedBookmarkId = bookmark.BookmarkId; 
+                                  showConfirmModal = true; }" 
+                              OnClick="() => NavToWordDetail(bookmark.WordId)"/>
+            </div>
+        }
+    </div>
+}
+
+<ConfirmationModal Title="Unbookmark confirm"
+                   Body="Unbookmark this word? The tags and notes of the bookmark will be removed."
+                   BtnType="ConfirmationModal.ModalButtonType.Danger"
+                   Visible="@showConfirmModal"
+                   OnConfirm="@(async () => {showConfirmModal = false; await UnBookmark();})"
+                   OnCancel="() => showConfirmModal = false" />
+
+@code {
+    private string searchText = string.Empty;
+    private PaginatedResult<Bookmark>? paginatedResult;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+    private string? selectedBookmarkId;
+    private bool showConfirmModal;
+    private int pageSize = 20;
+    private SyncExecStatus syncStatus = SyncExecStatus.Idling;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBookmarks();
+
+        TempStorageService.RemoveAll();
+
+        syncStatus = SyncExecService.Status;
+        SyncExecService.Changed += (sender, status) =>
+        {
+            syncStatus = status;
+            InvokeAsync(() => StateHasChanged());
+        };
+    }
+
+    private async Task LoadBookmarks()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        try
+        {
+            var isFirstLoad = TempStorageService.Peek<bool?>("app_loaded");
+            if (isFirstLoad is null)
+            {
+                paginatedResult = await Task.Run(async () => 
+                    await BookmarkService.GetBookmarksAsync(pageSize: pageSize));
+
+                TempStorageService.Push<bool?>("app_loaded", true);
+                TempStorageService.Protect("app_loaded");
+            }
+            else
+            {
+                paginatedResult = await BookmarkService.GetBookmarksAsync(pageSize: pageSize);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load bookmarks: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task UnBookmark()
+    {
+        if (!string.IsNullOrEmpty(selectedBookmarkId))
+        {
+            try
+            {
+                await BookmarkService.UnBookmarkAsync(selectedBookmarkId);
+                await LoadBookmarks();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to unbookmark: {ex.Message}";
+            }
+            finally
+            {
+                selectedBookmarkId = null;
+            }
+        }
+    }
+
+    private async Task OnNavLinkClick(string url)
+    {
+        await ScrollManager.ClearScrollPositions();
+        TempStorageService.RemoveAll();
+        Navigation.NavigateTo(url);
+    }
+
+    private void NavToSearch()
+    {
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            Navigation.NavigateTo($"/search?keyword={Uri.EscapeDataString(searchText)}");
+        }
+    }
+
+    private void NavToWordDetail(int wordId)
+    {
+        Navigation.NavigateTo($"/word/{wordId}");
+    }
+}

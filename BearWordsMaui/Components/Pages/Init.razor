@@ -1,0 +1,174 @@
+﻿@page "/init"
+@using static BearWordsMaui.Components.Pages.Elements.InitStep
+@inject NavigationManager Navigation
+@inject IInitService InitService
+@inject ILogService LogService
+@inject IWakeLockService WakeLockService
+
+<div class="card">
+    <div class="card-body text-center p-4">
+        <!-- Status Icon -->
+        <div class="status-icon initializing mx-auto">
+            <i class="bi bi-gear-fill fs-3"></i>
+        </div>
+
+        <!-- Status Title -->
+        <h3 class="card-title mb-3">Initializing Application</h3>
+
+        <!-- Status Badge -->
+        <span class="badge bg-info mb-3 px-3 py-2">
+            <i class="bi bi-hourglass-split me-1"></i>
+            Setting Up
+        </span>
+
+        <!-- Initialization Steps -->
+        <div class="text-start mb-4">
+            <InitStep Message="Setting configuration..." Status="@stepStatusDir[InitStep.SetConfig]" />
+            <InitStep Message="Connecting to server..." Status="@stepStatusDir[InitStep.ConnectToServer]" />
+            <InitStep Message="Pulling data from server..." Status="@stepStatusDir[InitStep.PullData]" />
+            <InitStep Message="Finish initializing..." Status="@stepStatusDir[InitStep.CleanUp]" />
+        </div>
+
+        <!-- Progress Indicator -->
+        <div class="text-center">
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <p class="text-muted text-danger mt-2 mb-0" style="white-space: pre-line;">@errorMessage</p>
+            }
+            else if (!isFinished)
+            {
+                <p class="text-muted mt-2 mb-0">This may take a few moments...</p>
+            }
+        </div>
+
+        @if (isFinished)
+        {
+            <button class="btn btn-primary mt-3 mb-3" @onclick="@(() => Navigation.NavigateTo("/", replace: true))">
+                <i class="bi bi-arrow-right me-1"></i>
+                Start
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? User { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Endpoint { get; set; }
+
+    private string errorMessage = string.Empty;
+    private OrderedDictionary<InitStep, StepStatus> stepStatusDir = new OrderedDictionary<InitStep, StepStatus>
+    {
+        { InitStep.SetConfig, StepStatus.NotStarted },
+        { InitStep.ConnectToServer, StepStatus.NotStarted },
+        { InitStep.PullData, StepStatus.NotStarted },
+        { InitStep.CleanUp, StepStatus.NotStarted }
+    };
+    private bool isFinished;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (User is null || Endpoint is null)
+        {
+            throw new InvalidNavigationException("The parameters from query are not set.");
+        }
+
+        var user = Uri.UnescapeDataString(User);
+        var endpoint = Uri.UnescapeDataString(Endpoint);
+
+        WakeLockService.AcquireWakeLock();  // Prevent screen auto turn off.
+        await StartInitAsync(user, endpoint);
+        WakeLockService.ReleaseWakeLock();
+    }
+
+    private async Task StartInitAsync(string user, string endpoint)
+    {
+        // InitStep.SetConfig
+        try
+        {
+            stepStatusDir[InitStep.SetConfig] = StepStatus.InProgress;
+            StateHasChanged();
+            await Task.Delay(500);
+
+            await Task.Run(async () =>
+            {
+                await InitService.ClearState();
+                await InitService.SetState(user, endpoint);
+            });
+
+            stepStatusDir[InitStep.SetConfig] = StepStatus.Completed;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            stepStatusDir[InitStep.SetConfig] = StepStatus.Failed;
+            errorMessage = "Set config: " + ex.Message;
+        }
+
+        await Task.Delay(300);
+
+        // InitStep.ConnectToServer
+        try
+        {
+            stepStatusDir[InitStep.ConnectToServer] = StepStatus.InProgress;
+            StateHasChanged();
+
+            await Task.Run(InitService.RegisterClient);
+
+            stepStatusDir[InitStep.ConnectToServer] = StepStatus.Completed;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            stepStatusDir[InitStep.ConnectToServer] = StepStatus.Failed;
+            var msg = "Connect to server: " + ex.Message;
+            errorMessage = string.IsNullOrEmpty(errorMessage) ? msg : errorMessage + "\n" + msg;
+            LogService.Error(ex.ToString());
+        }
+
+        await Task.Delay(300);
+
+        // InitStep.PullData
+        try
+        {
+            stepStatusDir[InitStep.PullData] = StepStatus.InProgress;
+            StateHasChanged();
+
+            await Task.Run(async () => await InitService.PullData());
+
+            stepStatusDir[InitStep.PullData] = StepStatus.Completed;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            stepStatusDir[InitStep.PullData] = StepStatus.Failed;
+            var msg = "Pull data: " + ex.Message;
+            errorMessage = string.IsNullOrEmpty(errorMessage) ? msg : errorMessage + "\n" + msg;
+            LogService.Error(ex.ToString());
+        }
+
+        await Task.Delay(300);
+
+        // InitStep.CleanUp
+        stepStatusDir[InitStep.CleanUp] = StepStatus.InProgress;
+        StateHasChanged();
+
+        await Task.Delay(500);
+        stepStatusDir[InitStep.CleanUp] = StepStatus.Completed;
+        StateHasChanged();
+
+        isFinished = true;
+    }
+
+    private enum InitStep
+    {
+        SetConfig,
+        ConnectToServer,
+        PullData,
+        CleanUp
+    }
+}

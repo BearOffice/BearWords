@@ -1,0 +1,41 @@
+﻿@inherits LayoutComponentBase
+@inject ConfigService ConfigService
+@inject ISyncExecService SyncExecService
+@inject IJSRuntime JSRuntime
+
+@if (IsAppConfigured())
+{
+    <NavMenu />
+}
+else
+{
+    <LogoutNavMenu />
+}
+
+<div class="container my-3">
+    @Body
+</div>
+
+
+@code{
+    protected override async Task OnInitializedAsync()
+    {
+        await JSRuntime.InvokeVoidAsync("initializeThemeListener", ConfigService.Theme.ToString().ToLower());
+        await JSRuntime.InvokeVoidAsync("applyTheme", ConfigService.Theme.ToString().ToLower());
+
+        // Trigger sync task
+        if (ConfigService.SyncAction == SyncAction.OnStart || ConfigService.SyncAction == SyncAction.OnAction)
+        {
+            if (IsAppConfigured())
+            {
+                _ = Task.Delay(3000).ContinueWith(async o => await SyncExecService.ExecuteAsync());
+            }
+        }
+    }
+
+    private bool IsAppConfigured()
+    {
+        return !string.IsNullOrEmpty(ConfigService.UserName) &&
+               !string.IsNullOrEmpty(ConfigService.ApiEndpoint);
+    }
+}
