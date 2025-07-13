@@ -198,11 +198,11 @@ public class SyncService : ISyncExecutor, ISyncUtils
         // Try registering the client again, as the initial registration may have failed.
         await RegisterClientAsync(_config.ClientId);
 
+        var cResults = await PullConflictsAsync();
+
         if (_config.SyncStatus != SyncStatus.Finished)
         {
-            var cResults = await PullConflictsAsync();
             await PushConflictsAsync(cResults);
-
             _config.SyncStatus = SyncStatus.Finished;
         }
 

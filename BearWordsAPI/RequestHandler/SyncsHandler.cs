@@ -45,55 +45,55 @@ public static class SyncsHandler
 
         var dictionaryTask = db.Dictionaries
             .AsNoTracking()
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new DictionaryDto(item))
             .ToArrayAsync();
 
         var translationTask = db.Translations
             .AsNoTracking()
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new TranslationDto(item))
             .ToArrayAsync();
 
         var phraseTask = db.Phrases
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new PhraseDto(item))
             .ToArrayAsync();
 
         var phraseTagTask = db.PhraseTags
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new PhraseTagDto(item))
             .ToArrayAsync();
 
         var bookmarkTask = db.Bookmarks
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new BookmarkDto(item))
             .ToArrayAsync();
 
         var bookmarkTagTask = db.BookmarkTags
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new BookmarkTagDto(item))
             .ToArrayAsync();
 
         var tagCategoryTask = db.TagCategories
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new TagCategoryDto(item))
             .ToArrayAsync();
 
         var tagTask = db.Tags
             .AsNoTracking()
             .WhereUser(userName)
-            .Where(item => item.ModifiedAt > lastPullTime)
+            .Where(item => item.ModifiedAt >= lastPullTime)
             .Select(item => new TagDto(item))
             .ToArrayAsync();
 
@@ -130,7 +130,8 @@ public static class SyncsHandler
             .WhereUser(userName)
             .SelectMany(u => u.Syncs)
             .FirstOrDefaultAsync(s => s.ClientId == clientId);
-
+        
+        var oldestModify = long.MaxValue;
         var failures = new Dictionary<string, string>();
 
         foreach (var obj in pushRequest.PushDto.TagCategories)
@@ -145,6 +146,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.TagCategories.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -166,6 +168,8 @@ public static class SyncsHandler
                 data.Description = obj.Description;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -191,6 +195,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.Tags.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -212,6 +217,8 @@ public static class SyncsHandler
                 data.Description = obj.Description;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -231,6 +238,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.Phrases.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -252,6 +260,8 @@ public static class SyncsHandler
                 data.Note = obj.Note;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -291,6 +301,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.PhraseTags.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -311,6 +322,8 @@ public static class SyncsHandler
                 data.TagId = obj.TagId;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -330,6 +343,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.Bookmarks.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -350,6 +364,8 @@ public static class SyncsHandler
                 data.Note = obj.Note;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -389,6 +405,7 @@ public static class SyncsHandler
             if (data is null)
             {
                 await db.BookmarkTags.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else if (obj.ModifiedAt > data.ModifiedAt)
             {
@@ -409,6 +426,8 @@ public static class SyncsHandler
                 data.TagId = obj.TagId;
                 data.ModifiedAt = obj.ModifiedAt;
                 data.DeleteFlag = obj.DeleteFlag;
+
+                if (oldestModify > obj.ModifiedAt) oldestModify = obj.ModifiedAt;
             }
             else
             {
@@ -442,6 +461,18 @@ public static class SyncsHandler
             return TypedResults.BadRequest(new SyncPushResponse(dbExceptions));
         }
 
+        // Ensure all clients can get all the pushed objs.
+        var syncs = await db.Users
+            .WhereUser(userName)
+            .SelectMany(u => u.Syncs)
+            .Where(s => s.ClientId != clientId)
+            .ToArrayAsync();
+        foreach (var s in syncs)
+        {
+            if (s!.LastPull > oldestModify)
+                s.LastPull = oldestModify;
+        }
+
         sync!.LastPush = serverPushStartTime;
         await db.SaveChangesAsync();
 
@@ -472,19 +503,5 @@ public static class SyncsHandler
     public static Ok<SyncServerTimeResponse> GetSyncServerTime(IDateTimeService dateTimeService)
     {
         return TypedResults.Ok(new SyncServerTimeResponse(dateTimeService.GetCurrentTicksString()));
-    }
-
-    private static string GetPluralName(string entityName)
-    {
-        return entityName switch
-        {
-            "Phrase" => "Phrases",
-            "PhraseTag" => "PhraseTags",
-            "Bookmark" => "Bookmarks",
-            "BookmarkTag" => "BookmarkTags",
-            "TagCategory" => "TagCategories",
-            "Tag" => "Tags",
-            _ => throw new NotImplementedException(),
-        };
     }
 }

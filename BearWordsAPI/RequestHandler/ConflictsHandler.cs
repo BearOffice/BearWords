@@ -47,11 +47,11 @@ public static class ConflictsHandler
         var logs = await db.Users
             .WhereUser(userName)
             .SelectMany(u => u.ConflictLogs)
+            .Where(l => l.ReportedAt >= lastPushTime)
             .ToArrayAsync();
 
         return TypedResults.Ok(new ConflictsPullResponse(
-            [.. logs.Where(l => l.ReportedAt >= lastPushTime)
-                    .Select(l => new ConflictLogDto(l))]
+            [.. logs.Select(l => new ConflictLogDto(l))]
         ));
     }
 
@@ -59,8 +59,9 @@ public static class ConflictsHandler
         ([FromRoute] string clientId, [FromBody] ConflictsPushRequest pushRequest,
             ClaimsPrincipal user, BearWordsContext db)
     {
-        var userName = user.Identity!.Name;
+        var userName = user.Identity!.Name!;
 
+        var oldestModify = long.MaxValue;
         var failures = new Dictionary<string, string>();
 
         foreach (var obj in pushRequest.ConflictLogs)
@@ -75,11 +76,24 @@ public static class ConflictsHandler
             if (data is null)
             {
                 await db.ConflictLogs.AddAsync(obj.ToEntity());
+                if (oldestModify > obj.ReportedAt) oldestModify = obj.ReportedAt;
             }
             else
             {
                 failures.Add(obj.ConflictLogId, _notAppliedExceptionMessage);
             }
+        }
+
+        // Ensure all clients can get all the pushed objs.
+        var syncs = await db.Users
+            .WhereUser(userName)
+            .SelectMany(u => u.Syncs)
+            .Where(s => s.ClientId != clientId)
+            .ToArrayAsync();
+        foreach (var sync in syncs)
+        {
+            if (sync!.LastPush > oldestModify)
+                sync.LastPush = oldestModify;
         }
 
         await db.SaveChangesAsync();
